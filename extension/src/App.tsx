@@ -22,14 +22,9 @@ import {
 import {
   dismissLatestThreat,
   checkBackendHealth,
-  getGitHubStatus,
-  listQuarantines,
-  loadCachedQuarantines,
   subscribeToLatestScan,
   subscribeToLatestThreat,
   type LatestScan,
-  type GitHubStatus,
-  type QuarantineRecord,
   type ThreatFinding,
 } from "./services/threatFindings";
 import "./App.css";
@@ -87,23 +82,6 @@ function App() {
   const [page, setPage] = useState<Page>("overview");
   const [latestThreat, setLatestThreat] = useState<ThreatFinding | null>(null);
   const [latestScan, setLatestScan] = useState<LatestScan | null>(null);
-  const [quarantines, setQuarantines] = useState<QuarantineRecord[]>([]);
-  const [quarantineSource, setQuarantineSource] = useState<
-    "loading" | "backend" | "cached" | "unavailable"
-  >("loading");
-  const [quarantineError, setQuarantineError] = useState<string | null>(null);
-  const [githubAppStatus, setGithubAppStatus] = useState<GitHubStatus | null>(
-    null,
-  );
-  const [githubAppError, setGithubAppError] = useState<string | null>(null);
-  const [mergeProtection, setMergeProtection] = useState<{
-    status: string;
-    reason?: string;
-  }>({
-    status: "UNKNOWN",
-    reason: "Checking GitHub enforcement configuration.",
-  });
-  const [currentTime, setCurrentTime] = useState<number | null>(null);
   const [backendState, setBackendState] = useState<
     "checking" | "connected" | "offline"
   >("checking");
@@ -122,38 +100,7 @@ function App() {
       setBackendState(result.connected ? "connected" : "offline");
       setBackendError(result.error ?? null);
     });
-    void listQuarantines()
-      .then((result) => {
-        if (!active) return;
-        setQuarantines(result.items);
-        setQuarantineSource("backend");
-        setQuarantineError(null);
-      })
-      .catch(async (error: unknown) => {
-        if (!active) return;
-        setQuarantineError(
-          error instanceof Error ? error.message : "Could not load quarantine state.",
-        );
-        try {
-          const cached = await loadCachedQuarantines();
-          if (!active) return;
-          if (cached) {
-            setQuarantines(cached.items);
-            setMergeProtection(cached.merge_protection);
-            setQuarantineSource("cached");
-          } else {
-            setQuarantineSource("unavailable");
-          }
-        } catch (cacheError) {
-          if (!active) return;
-          setQuarantineSource("unavailable");
-          setQuarantineError(
-            cacheError instanceof Error
-              ? cacheError.message
-              : "Could not restore saved quarantine state.",
-          );
-        }
-      });
+
     return () => {
       active = false;
       unsubscribeThreat();
@@ -161,44 +108,6 @@ function App() {
     };
   }, []);
 
-  useEffect(() => {
-    let active = true;
-    void getGitHubStatus(latestScan?.repository)
-      .then((result) => {
-        if (!active) return;
-        setGithubAppStatus(result);
-        setMergeProtection({
-          status: result.merge_protection,
-          reason: result.reason,
-        });
-        setGithubAppError(null);
-      })
-      .catch((error: unknown) => {
-        if (!active) return;
-        setGithubAppError(
-          error instanceof Error
-            ? error.message
-            : "Could not load GitHub App status.",
-        );
-      });
-    return () => {
-      active = false;
-    };
-  }, [latestScan?.repository]);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setCurrentTime(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  const activeQuarantines = quarantines.filter((quarantine) =>
-    ["QUARANTINED", "REVIEW_REQUIRED", "ESCALATED", "REJECTED"].includes(
-      quarantine.state,
-    ),
-  );
-  const latestThreatIsQuarantined = activeQuarantines.some(
-    (quarantine) => quarantine.finding_id === latestThreat?.id,
-  );
   const threatSeverity = latestThreat?.severity.toUpperCase();
   const threatFilter: Severity | null = threatSeverity
     ? threatSeverity === "CRITICAL" || threatSeverity === "HIGH"
@@ -218,46 +127,6 @@ function App() {
       setBackendState(result.connected ? "connected" : "offline");
       setBackendError(result.error ?? null);
     });
-    void listQuarantines()
-      .then((result) => {
-        setQuarantines(result.items);
-        setQuarantineSource("backend");
-        setQuarantineError(null);
-      })
-      .catch((error: unknown) => {
-        setQuarantineSource("unavailable");
-        setQuarantineError(
-          error instanceof Error ? error.message : "Could not load quarantine state.",
-        );
-      });
-    void getGitHubStatus(latestScan?.repository)
-      .then((result) => {
-        setGithubAppStatus(result);
-        setMergeProtection({
-          status: result.merge_protection,
-          reason: result.reason,
-        });
-        setGithubAppError(null);
-      })
-      .catch((error: unknown) => {
-        setGithubAppError(
-          error instanceof Error
-            ? error.message
-            : "Could not load GitHub App status.",
-        );
-      });
-  }
-
-  function formatCountdown(deadline: string | null | undefined) {
-    if (!deadline) return "Review deadline unavailable";
-    if (currentTime === null) return "Calculating review countdown…";
-    const remaining = Date.parse(deadline) - currentTime;
-    if (!Number.isFinite(remaining)) return "Review deadline unavailable";
-    if (remaining <= 0) return "Deadline passed · quarantine remains active";
-    const hours = Math.floor(remaining / 3_600_000);
-    const minutes = Math.floor((remaining % 3_600_000) / 60_000);
-    const seconds = Math.floor((remaining % 60_000) / 1000);
-    return `${hours}h ${minutes}m ${seconds}s remaining`;
   }
 
   function toggleSeverity(severity: Severity) {
@@ -303,22 +172,20 @@ function App() {
             <AlertTriangle size={19} />
           </div>
           <div className="threat-banner-content">
-            <strong>SECURITY REGRESSION FLAGGED</strong>
+            <strong>MALICIOUS CHANGE DETECTED</strong>
             <span>{latestThreat.title}</span>
             <small>
               {latestThreat.repository} ·{" "}
               {new Date(latestThreat.detectedAt).toLocaleString()}
             </small>
           </div>
-          {!latestThreatIsQuarantined && (
-            <button
-              className="threat-dismiss"
-              aria-label="Dismiss security alert"
-              onClick={dismissThreat}
-            >
-              <X size={17} />
-            </button>
-          )}
+          <button
+            className="threat-dismiss"
+            aria-label="Dismiss security alert"
+            onClick={dismissThreat}
+          >
+            <X size={17} />
+          </button>
         </section>
       )}
 
@@ -391,48 +258,6 @@ function App() {
             </button>
           </section>
 
-          <section
-            className={`status-card backend-card ${
-              githubAppStatus?.merge_protection === "ENFORCED"
-                ? "connected"
-                : "offline"
-            }`}
-          >
-            <div className="status-icon">
-              {githubAppStatus?.merge_protection === "ENFORCED" ? (
-                <ShieldCheck size={26} />
-              ) : (
-                <ShieldAlert size={26} />
-              )}
-            </div>
-            <div className="status-content">
-              <span>GITHUB APP · REQUIRED CHECK</span>
-              <h3>
-                {githubAppStatus
-                  ? githubAppStatus.app_configured
-                    ? githubAppStatus.installed
-                      ? "GitHub App installation recorded"
-                      : "GitHub App not verified as installed"
-                    : "GitHub App not configured"
-                  : "GitHub App status unavailable"}
-              </h3>
-              <p>
-                {githubAppError ||
-                  githubAppStatus?.reason ||
-                  "Merge enforcement has not been verified."}
-              </p>
-            </div>
-            <span
-              className={`status-badge ${
-                githubAppStatus?.merge_protection === "ENFORCED"
-                  ? "connected"
-                  : "offline"
-              }`}
-            >
-              {githubAppStatus?.merge_protection ?? "UNKNOWN"}
-            </span>
-          </section>
-
           <section className="stats">
             <div className="stat-card">
               <GitPullRequest size={19} />
@@ -442,117 +267,14 @@ function App() {
 
             <div className="stat-card">
               <ShieldAlert size={19} />
-              <h2>{activeQuarantines.length}</h2>
-              <p>Active quarantines</p>
+              <h2>{latestThreat ? "1" : "0"}</h2>
+              <p>Open findings</p>
             </div>
 
             <div className="stat-card">
               <Package size={19} />
               <h2>{backendState === "connected" ? "ON" : "OFF"}</h2>
               <p>Backend</p>
-            </div>
-          </section>
-
-          <section className="quarantine-section alerts-section">
-            <div className="section-heading">
-              <div>
-                <h3>Persistent PR quarantines</h3>
-                <p>
-                  {quarantineSource === "cached"
-                    ? "Showing saved data; backend refresh is unavailable."
-                    : "Current state and deadline from the backend"}
-                </p>
-              </div>
-              <span className="alert-count">
-                {String(activeQuarantines.length).padStart(2, "0")}
-              </span>
-            </div>
-
-            {quarantineError && (
-              <p className="quarantine-warning" role="status">
-                Backend quarantine state could not be refreshed: {quarantineError}
-                {quarantineSource === "unavailable"
-                  ? " Do not treat this PR as verified clean."
-                  : ""}
-              </p>
-            )}
-
-            {activeQuarantines.length > 0 ? (
-              <div className="quarantine-list">
-                {activeQuarantines.map((quarantine) => {
-                  const [owner, repo] = quarantine.repository.split("/", 2);
-                  const pullRequestUrl =
-                    owner && repo
-                      ? `https://github.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pull/${quarantine.pr_number}`
-                      : null;
-                  const findingTitle =
-                    typeof quarantine.finding.title === "string"
-                      ? quarantine.finding.title
-                      : "Security finding";
-
-                  return (
-                    <article
-                      className={`quarantine-card ${quarantine.state.toLowerCase()}`}
-                      key={quarantine.finding_id}
-                    >
-                      <div className="quarantine-card-heading">
-                        <span className="severity high">{quarantine.state}</span>
-                        <span className="quarantine-risk">
-                          {quarantine.severity} · risk {quarantine.risk_score}
-                        </span>
-                      </div>
-                      <h4>{findingTitle}</h4>
-                      <p>
-                        {quarantine.repository} · PR #{quarantine.pr_number}
-                        {quarantine.pr_author
-                          ? ` · @${quarantine.pr_author}`
-                          : ""}
-                      </p>
-                      <p className="quarantine-countdown">
-                        {formatCountdown(quarantine.review_deadline)}
-                      </p>
-                      <p className="quarantine-commit">
-                        Commit: {quarantine.head_sha || "unavailable"}
-                      </p>
-                      {pullRequestUrl && (
-                        <a href={pullRequestUrl} target="_blank" rel="noreferrer">
-                          Open pull request
-                        </a>
-                      )}
-                    </article>
-                  );
-                })}
-              </div>
-            ) : quarantineSource === "loading" ? (
-              <p className="empty-state">Loading backend quarantine records…</p>
-            ) : quarantineSource === "unavailable" ? (
-              <p className="empty-state">
-                Quarantine state unavailable. A failed connection is not a clean
-                scan.
-              </p>
-            ) : (
-              <p className="empty-state">
-                No active quarantine records were returned. This is not a
-                guarantee that the pull request is safe.
-              </p>
-            )}
-
-            <div
-              className={`enforcement-notice ${
-                mergeProtection.status === "ENFORCED" ? "enforced" : "not-enforced"
-              }`}
-              role="note"
-            >
-              <ShieldAlert size={16} />
-              <div>
-                <strong>
-                  GitHub merge protection: {mergeProtection.status}
-                </strong>
-                <span>
-                  {mergeProtection.reason ||
-                    "Required branch protection has not been verified."}
-                </span>
-              </div>
             </div>
           </section>
 

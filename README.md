@@ -26,7 +26,7 @@
   - [3. Running the Verification Suite](#3-running-the-verification-suite)
 - [Run on macOS](#run-on-macos)
 - [Experimental Detection Engine](#experimental-detection-engine)
-- [GitHub App & Merge Protection](#github-app--merge-protection)
+- [GitHub Actions Merge Protection](#github-actions-merge-protection)
 - [API Reference](#-api-reference)
 - [Testing & Quality Assurance](#-testing--quality-assurance)
 - [Roadmap](#-roadmap)
@@ -38,7 +38,7 @@
 
 **DiffShield** acts as an active security defense line on pull requests. While traditional SAST scanners look for known static signatures, attackers and well-meaning contributors often silently undo security controls—such as removing input sanitizers, bypassing authentication checks, dropping rate limiters, or disabling CSRF protections.
 
-DiffShield uses an AST and block-level diff parser alongside a historical patch intelligence engine to detect when a security guard around a vulnerable sink has been stripped or degraded. If a regression is found, DiffShield alerts security reviewers directly in GitHub and stores a reverse patch for recovery.
+DiffShield uses an AST and block-level diff parser to detect when a security guard around a vulnerable sink has been stripped or degraded. The extension and GitHub Actions check surface findings for review; the backend can also store reverse patches for recovery.
 
 ---
 
@@ -133,6 +133,7 @@ diff-shield/
 ├── backend/
 │   ├── block_parser.py         # Multi-language AST block parser & language detector
 │   ├── regression_engine.py    # Rule-based guard regression & CVE detection engine
+│   ├── ci_check.py             # GitHub Actions PR diff check
 │   ├── snapshot_vault.py       # SQLite snapshot archiving & reverse-patch generator
 │   ├── main.py                 # FastAPI application & GitHub PR fetching endpoints
 │   ├── test_diffshield.py      # Automated test suite (75 unit & integration checks)
@@ -227,7 +228,7 @@ DiffShield comes with a comprehensive test suite covering all supported programm
 cd backend
 pip install -r requirements-dev.txt
 python test_diffshield.py
-python -m pytest test_api.py test_ci_check.py test_quarantine.py test_github_app.py -q
+python -m pytest test_api.py test_ci_check.py -q
 
 cd ../detection-engine
 python -m pytest -q
@@ -282,58 +283,7 @@ code. On pull-request open, reopen, synchronization, and ready-for-review
 events, it only retrieves the PR diff, does not check out or execute
 contributor code, and gives its scan step a token limited to reading pull
 requests and writing checks. A detected regression fails the required
-`DiffShield Security Gate` check on the PR head commit. This mode does not run
-the backend service or provide its persistent 12-hour quarantine/reviewer
-workflow.
-
-## Optional GitHub App Backend Integration
-
-The backend also supports automatic PR scans and persistent quarantine through
-a GitHub App. This alternative requires a backend you control that GitHub can
-reach over HTTPS; the local backend on `127.0.0.1` cannot receive GitHub
-webhooks. Without the App and a verified repository check, the backend reports
-merge protection as `NOT_ENFORCED`.
-
-1. Create a GitHub App with a webhook URL ending in `/api/github/webhook` and a
-   webhook secret. Subscribe to the **Pull request** and **Installation**
-   webhook events.
-2. Grant repository permissions: **Pull requests** (read and write), **Checks**
-   (read and write), **Issues** (read and write, for maintainer comments), and
-   **Administration** (read, to verify required status checks). Install the App
-   on each repository it should scan.
-3. Configure `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, and
-   `GITHUB_WEBHOOK_SECRET` in the backend environment. The private key may use
-   literal `\n` sequences for line breaks. Keep these values in a secret
-   manager; never commit them. `GITHUB_TOKEN` may separately be set to increase
-   the GitHub API rate limit for direct extension/API scans.
-4. In each target repository's branch protection or ruleset, require the check
-   **DiffShield Security Gate** and select the check produced by the DiffShield
-   GitHub App. DiffShield creates this check for PR commits; a required check
-   must be configured by a repository administrator.
-5. Verify the setup with
-   `GET /api/github/status?repository=owner/repo`. The response reports
-   `ENFORCED` only when the App installation and the App-owned required check
-   have both been verified for that repository's base branch. The global
-   `/api/github/status` endpoint always reports `NOT_ENFORCED`, because
-   enforcement is repository-specific.
-
-The App scans pull requests when they are opened, reopened, or synchronized,
-and handles installation creation/removal events. Quarantines are persisted in
-SQLite (by default `backend/diffshield_quarantines.db`; override with
-`DIFFSHIELD_QUARANTINE_DB`). A finding stays held for at least 12 hours and is
-escalated if not reviewed; expiry does not release it.
-
-Authorized resolution is configured separately with
-`DIFFSHIELD_REVIEWER_TOKENS`, a JSON object mapping reviewer identities to
-bearer tokens of at least 32 characters. For example:
-
-```text
-{"security-reviewer":"replace-with-a-random-secret-of-at-least-32-characters"}
-```
-
-Send the token as `Authorization: Bearer <token>` to
-`POST /api/quarantines/{finding_id}/resolve`. This is backend-configured token
-authentication, not GitHub user OAuth; protect the API and tokens accordingly.
+`DiffShield Security Gate` check on the PR head commit.
 
 ---
 
@@ -453,7 +403,7 @@ repository automatically.
 
 DiffShield is built with an AppSec-first philosophy:
 - **Zero Ingestion of Sensitive Secrets**: Analysis runs locally or within private VPC environments. Vault databases use local SQLite files that are strictly `.gitignore`'d from Git tracking.
-- **Fail-Open / Fail-Closed Customization**: The backend provides deterministic risk scores allowing CI/CD systems to either warn reviewers or automatically quarantine PR merges.
+- **Fail-Closed CI Check**: The GitHub Actions workflow fails its required status check when the detector finds a possible security-guard regression.
 - **Collision Resistance**: Regex and AST tokenizers enforce boundary delimiters to prevent false positives (e.g., distinguishing Java `DocumentBuilder` from unrelated `.newInstance()` calls, or `destination` variables from `DES` cipher suites).
 
 ---
