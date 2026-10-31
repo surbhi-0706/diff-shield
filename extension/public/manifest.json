@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "DIFF SHIELD",
+  "version": "0.1.0",
+  "description": "Detect suspicious security changes in open-source pull requests and dependency updates.",
+  "action": {
+    "default_popup": "index.html"
+  },
+  "permissions": [
+    "storage"
+  ]
+}
