@@ -3,6 +3,28 @@
 The extension popup provides a security dashboard and displays a persistent red
 banner when it receives a malicious-change finding.
 
+## Build and load the extension
+
+The browser must load the compiled extension directory. From the repository
+root, run:
+
+```bash
+cd extension
+npm install
+npm run build
+```
+
+Then open the browser's extensions page, enable developer mode, choose **Load
+unpacked**, and select:
+
+```text
+extension/dist
+```
+
+Do not select the repository root, `extension`, or `extension/public`.
+`manifest.json` is copied from `extension/public` to `extension/dist` by Vite
+when `npm run build` completes.
+
 ## Sending a malicious-change finding
 
 The extension does not currently include a code scanner. A scanner or trusted
