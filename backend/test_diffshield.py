@@ -329,12 +329,13 @@ check("PASSED", r["status"] == "PASSED", r["status"])
 # ─────────────────────────────────────────────────────────────
 # Summary
 # ─────────────────────────────────────────────────────────────
-print(f"\n{'='*56}")
-passed = sum(_results)
-total = len(_results)
-if passed == total:
-    print(f"  \033[92mOK: ALL {total} CHECKS PASSED\033[0m")
-else:
-    print(f"  FAIL: {total - passed} of {total} CHECKS FAILED")
-print(f"{'='*56}\n")
-sys.exit(0 if passed == total else 1)
+if __name__ == "__main__":
+    print(f"\n{'='*56}")
+    passed = sum(_results)
+    total = len(_results)
+    if passed == total:
+        print(f"  \033[92mOK: ALL {total} CHECKS PASSED\033[0m")
+    else:
+        print(f"  FAIL: {total - passed} of {total} CHECKS FAILED")
+    print(f"{'='*56}\n")
+    sys.exit(0 if passed == total else 1)

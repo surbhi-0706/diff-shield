@@ -1,7 +1,7 @@
 # 🛡️ DiffShield
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688.svg?style=flat&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
-[![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?style=flat&logo=python&logoColor=white)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.12%20%7C%203.13-3776AB.svg?style=flat&logo=python&logoColor=white)](https://www.python.org/)
 [![React](https://img.shields.io/badge/React-18.x-61DAFB.svg?style=flat&logo=react&logoColor=black)](https://reactjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6.svg?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Chrome Extension](https://img.shields.io/badge/Chrome_Extension-Manifest_v3-4285F4.svg?style=flat&logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/mv3/)
@@ -24,6 +24,9 @@
   - [1. Backend Setup](#1-backend-setup)
   - [2. Chrome Extension Setup](#2-chrome-extension-setup)
   - [3. Running the Verification Suite](#3-running-the-verification-suite)
+- [Run on macOS](#run-on-macos)
+- [Experimental Detection Engine](#experimental-detection-engine)
+- [GitHub App & Merge Protection](#github-app--merge-protection)
 - [API Reference](#-api-reference)
 - [Testing & Quality Assurance](#-testing--quality-assurance)
 - [Roadmap](#-roadmap)
@@ -100,7 +103,7 @@ flowchart TD
   - XML External Entity (XXE) and Insecure Deserialization (Pickle, YAML, Java ObjectInputStream)
 - 💾 **Snapshot Vault & Reverse Patches**: Archives PR diffs and computes reverse patches. A full baseline is included only when a caller supplies `clean_code`; GitHub PR scans do not fetch or store the full repository source.
 - 🎨 **Sleek Emerald Dark Extension UI**: Manifest v3 extension with glassmorphism design, threat badges, severity meters, and detailed remediation advice.
-- 🧪 **Exhaustive Automated Verification**: Over 74 test assertions covering diff parsing, edge-case collisions, and rollback integrity.
+- 🧪 **Automated Verification**: 75 backend checks plus focused API and detection-engine test suites.
 
 ---
 
@@ -132,9 +135,9 @@ diff-shield/
 │   ├── regression_engine.py    # Rule-based guard regression & CVE detection engine
 │   ├── snapshot_vault.py       # SQLite snapshot archiving & reverse-patch generator
 │   ├── main.py                 # FastAPI application & GitHub PR fetching endpoints
-│   ├── test_diffshield.py      # Automated test suite (74 unit & integration checks)
+│   ├── test_diffshield.py      # Automated test suite (75 unit & integration checks)
 │   └── requirements.txt        # Backend Python dependencies
-├── detection-engine/
+├── detection-engine/           # Experimental package; not used by the backend
 │   ├── analyzers/              # Deep AST & diff analyzers
 │   ├── vulnerability_intel/    # Known CVE patch intelligence database & schemas
 │   └── tests/                  # Detection engine unit tests
@@ -156,7 +159,7 @@ diff-shield/
 ## 🚀 Quick Start Guide
 
 ### Prerequisites
-- **Python 3.10+**
+- **Python 3.12 or 3.13** (stable releases)
 - **Node.js 18+** and **npm**
 - **Google Chrome** (or any Chromium-based browser)
 
@@ -202,7 +205,7 @@ diff-shield/
 
 2. Install dependencies and build the extension bundle:
    ```bash
-   npm install
+   npm ci
    npm run build
    ```
 
@@ -222,9 +225,113 @@ DiffShield comes with a comprehensive test suite covering all supported programm
 
 ```bash
 cd backend
+pip install -r requirements-dev.txt
 python test_diffshield.py
-python -m unittest test_api
+python -m pytest test_api.py test_ci_check.py test_quarantine.py test_github_app.py -q
+
+cd ../detection-engine
+python -m pytest -q
 ```
+
+`backend/requirements-dev.txt` installs the backend dependencies plus pytest.
+`detection-engine/requirements.txt` states that the experimental package has
+no third-party dependencies.
+
+---
+
+## Run on macOS
+
+Use Python 3.12 or 3.13 for the backend (not a pre-release Python version):
+
+```bash
+cd backend
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python -m uvicorn main:app --host 127.0.0.1 --port 8000
+# check: curl http://127.0.0.1:8000/health
+```
+
+In another terminal, build and load the extension:
+
+```bash
+cd extension
+npm ci
+npm run build
+# Chrome -> chrome://extensions -> Developer mode -> Load unpacked -> choose extension/dist
+```
+
+## Experimental Detection Engine
+
+`detection-engine/` is an experimental, standalone package and is not imported
+or used by the FastAPI backend. Its tests can be run separately as shown above.
+It currently has no third-party Python dependencies.
+
+## GitHub Actions Merge Protection
+
+The workflow in
+`.github/workflows/diffshield-security-gate.yml` creates a **DiffShield Security
+Gate** check on each pull request's head commit. Enable GitHub Actions for the
+repository, then create a branch protection rule for `main` and require the
+status check **DiffShield Security Gate** from the **GitHub Actions** app.
+Require pull requests before merging so changes cannot bypass the check by
+being pushed directly to `main`.
+
+The workflow uses `pull_request_target` so its scanner comes from trusted base
+code. It only retrieves the PR diff, does not check out or execute contributor
+code, and gives its scan step a token limited to reading pull requests and
+writing checks. A detected regression fails the required status check. This
+mode does not run the backend service or provide its persistent 12-hour
+quarantine/reviewer workflow.
+
+## Optional GitHub App Backend Integration
+
+The backend also supports automatic PR scans and persistent quarantine through
+a GitHub App. This alternative requires a backend you control that GitHub can
+reach over HTTPS; the local backend on `127.0.0.1` cannot receive GitHub
+webhooks. Without the App and a verified repository check, the backend reports
+merge protection as `NOT_ENFORCED`.
+
+1. Create a GitHub App with a webhook URL ending in `/api/github/webhook` and a
+   webhook secret. Subscribe to the **Pull request** and **Installation**
+   webhook events.
+2. Grant repository permissions: **Pull requests** (read and write), **Checks**
+   (read and write), **Issues** (read and write, for maintainer comments), and
+   **Administration** (read, to verify required status checks). Install the App
+   on each repository it should scan.
+3. Configure `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, and
+   `GITHUB_WEBHOOK_SECRET` in the backend environment. The private key may use
+   literal `\n` sequences for line breaks. Keep these values in a secret
+   manager; never commit them. `GITHUB_TOKEN` may separately be set to increase
+   the GitHub API rate limit for direct extension/API scans.
+4. In each target repository's branch protection or ruleset, require the check
+   **DiffShield Security Gate** and select the check produced by the DiffShield
+   GitHub App. DiffShield creates this check for PR commits; a required check
+   must be configured by a repository administrator.
+5. Verify the setup with
+   `GET /api/github/status?repository=owner/repo`. The response reports
+   `ENFORCED` only when the App installation and the App-owned required check
+   have both been verified for that repository's base branch. The global
+   `/api/github/status` endpoint always reports `NOT_ENFORCED`, because
+   enforcement is repository-specific.
+
+The App scans pull requests when they are opened, reopened, or synchronized,
+and handles installation creation/removal events. Quarantines are persisted in
+SQLite (by default `backend/diffshield_quarantines.db`; override with
+`DIFFSHIELD_QUARANTINE_DB`). A finding stays held for at least 12 hours and is
+escalated if not reviewed; expiry does not release it.
+
+Authorized resolution is configured separately with
+`DIFFSHIELD_REVIEWER_TOKENS`, a JSON object mapping reviewer identities to
+bearer tokens of at least 32 characters. For example:
+
+```text
+{"security-reviewer":"replace-with-a-random-secret-of-at-least-32-characters"}
+```
+
+Send the token as `Authorization: Bearer <token>` to
+`POST /api/quarantines/{finding_id}/resolve`. This is backend-configured token
+authentication, not GitHub user OAuth; protect the API and tokens accordingly.
 
 ---
 
@@ -265,7 +372,9 @@ Content-Type: application/json
 
 Provide either `pr_url` or `diff_text`, not both. `pr_url` must be an HTTPS
 GitHub pull-request URL. Optionally provide `clean_code` when a source baseline
-is available.
+is available. GitHub diffs are fetched through the GitHub API. Set `GITHUB_TOKEN`
+in the backend environment to increase the API rate limit; the token is not
+included in logs or responses.
 
 **Response:**
 ```json

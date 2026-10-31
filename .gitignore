@@ -44,6 +44,7 @@ jspm_packages/
 # Python cache
 __pycache__/
 *.py[cod]
+**/.venv/
 
 # Local backend database
 /diff_shield.db

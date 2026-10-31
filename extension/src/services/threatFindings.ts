@@ -21,6 +21,55 @@ export interface LatestScan {
   finding?: ThreatFinding | null;
 }
 
+export type QuarantineState =
+  | "SCANNING"
+  | "CLEAN"
+  | "QUARANTINED"
+  | "REVIEW_REQUIRED"
+  | "ESCALATED"
+  | "RESOLVED"
+  | "REJECTED"
+  | "ERROR";
+
+export interface QuarantineRecord {
+  finding_id: string;
+  repository: string;
+  pr_number: number;
+  pr_url: string;
+  pr_title?: string | null;
+  pr_author?: string | null;
+  head_sha?: string | null;
+  base_sha?: string | null;
+  finding: Record<string, unknown>;
+  severity: string;
+  risk_score: number;
+  confidence?: number | null;
+  detected_at: string;
+  quarantine_started_at?: string | null;
+  review_deadline?: string | null;
+  state: QuarantineState;
+  review_history: Array<Record<string, unknown>>;
+  reviewer_identity?: string | null;
+  resolution_reason?: string | null;
+  check_run_id?: number | null;
+}
+
+export interface QuarantineListResponse {
+  items: QuarantineRecord[];
+  merge_protection: {
+    status: string;
+    reason?: string;
+  };
+}
+
+export interface GitHubStatus {
+  app_configured: boolean;
+  installed: boolean | null;
+  required_check_configured: boolean | null;
+  merge_protection: string;
+  reason: string;
+}
+
 interface RuntimeResponse<T> {
   ok: boolean;
   result?: T;
@@ -31,7 +80,7 @@ interface ChromeExtensionApi {
   runtime?: {
     lastError?: { message?: string };
     sendMessage<T>(
-      message: { type: string },
+      message: { type: string; repository?: string },
       callback: (response?: RuntimeResponse<T>) => void,
     ): void;
   };
@@ -63,6 +112,8 @@ interface ChromeExtensionApi {
 const extensionApi = (
   globalThis as typeof globalThis & { chrome?: ChromeExtensionApi }
 ).chrome;
+const BACKEND_HEALTH_URL = "http://127.0.0.1:8000/health";
+const QUARANTINE_API_URL = "http://127.0.0.1:8000/api/quarantines";
 
 export function isThreatFinding(value: unknown): value is ThreatFinding {
   if (typeof value !== "object" || value === null) {
@@ -92,6 +143,137 @@ function isLatestScan(value: unknown): value is LatestScan {
     typeof scan.scannedAt === "string" &&
     typeof scan.prUrl === "string"
   );
+}
+
+function isQuarantineRecord(value: unknown): value is QuarantineRecord {
+  if (typeof value !== "object" || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.finding_id === "string" &&
+    typeof record.repository === "string" &&
+    typeof record.pr_number === "number" &&
+    typeof record.pr_url === "string" &&
+    typeof record.state === "string" &&
+    typeof record.detected_at === "string" &&
+    typeof record.risk_score === "number" &&
+    typeof record.finding === "object" &&
+    record.finding !== null
+  );
+}
+
+function isQuarantineListResponse(
+  value: unknown,
+): value is QuarantineListResponse {
+  if (typeof value !== "object" || value === null) return false;
+  const result = value as Record<string, unknown>;
+  return (
+    Array.isArray(result.items) &&
+    result.items.every(isQuarantineRecord) &&
+    typeof result.merge_protection === "object" &&
+    result.merge_protection !== null
+  );
+}
+
+export function listQuarantines(): Promise<QuarantineListResponse> {
+  const runtime = extensionApi?.runtime;
+  if (typeof runtime?.sendMessage === "function") {
+    return new Promise((resolve, reject) => {
+      runtime.sendMessage<unknown>(
+        { type: "DIFF_SHIELD_LIST_QUARANTINES" },
+        (response) => {
+          const error = extensionApi?.runtime?.lastError?.message;
+          if (error) {
+            reject(new Error(error));
+            return;
+          }
+          if (!response?.ok || !isQuarantineListResponse(response.result)) {
+            reject(new Error(response?.error ?? "Invalid quarantine data from backend."));
+            return;
+          }
+          resolve(response.result);
+        },
+      );
+    });
+  }
+
+  return fetch(QUARANTINE_API_URL, {
+    headers: { Accept: "application/json" },
+  }).then(async (response) => {
+    if (!response.ok) {
+      throw new Error(`Could not load quarantines (${response.status}).`);
+    }
+    const data: unknown = await response.json();
+    if (!isQuarantineListResponse(data)) {
+      throw new Error("The backend returned invalid quarantine data.");
+    }
+    return data;
+  });
+}
+
+function isGitHubStatus(value: unknown): value is GitHubStatus {
+  if (typeof value !== "object" || value === null) return false;
+  const status = value as Record<string, unknown>;
+  return (
+    typeof status.app_configured === "boolean" &&
+    (typeof status.installed === "boolean" || status.installed === null) &&
+    (typeof status.required_check_configured === "boolean" ||
+      status.required_check_configured === null) &&
+    typeof status.merge_protection === "string" &&
+    typeof status.reason === "string"
+  );
+}
+
+export function getGitHubStatus(repository?: string): Promise<GitHubStatus> {
+  const runtime = extensionApi?.runtime;
+  if (typeof runtime?.sendMessage === "function") {
+    return new Promise((resolve, reject) => {
+      runtime.sendMessage<unknown>(
+        { type: "DIFF_SHIELD_GITHUB_STATUS", repository },
+        (response) => {
+          const error = extensionApi?.runtime?.lastError?.message;
+          if (error) {
+            reject(new Error(error));
+            return;
+          }
+          if (!response?.ok || !isGitHubStatus(response.result)) {
+            reject(new Error(response?.error ?? "Invalid GitHub integration status."));
+            return;
+          }
+          resolve(response.result);
+        },
+      );
+    });
+  }
+
+  const suffix = repository ? `?repository=${encodeURIComponent(repository)}` : "";
+  return fetch(`http://127.0.0.1:8000/api/github/status${suffix}`, {
+    headers: { Accept: "application/json" },
+  }).then(async (response) => {
+    if (!response.ok) {
+      throw new Error(`Could not load GitHub integration status (${response.status}).`);
+    }
+    const data: unknown = await response.json();
+    if (!isGitHubStatus(data)) {
+      throw new Error("The backend returned invalid GitHub integration status.");
+    }
+    return data;
+  });
+}
+
+export function loadCachedQuarantines(): Promise<QuarantineListResponse | null> {
+  const storage = extensionApi?.storage;
+  if (!storage) return Promise.resolve(null);
+  return new Promise((resolve, reject) => {
+    storage.local.get("quarantineData", (items) => {
+      const error = extensionApi?.runtime?.lastError;
+      if (error) {
+        reject(new Error(error.message));
+        return;
+      }
+      const cached = items.quarantineData;
+      resolve(isQuarantineListResponse(cached) ? cached : null);
+    });
+  });
 }
 
 export function subscribeToLatestThreat(
@@ -171,11 +353,8 @@ export function checkBackendHealth(): Promise<{
   error?: string;
 }> {
   const runtime = extensionApi?.runtime;
-  if (!runtime) {
-    return Promise.resolve({
-      connected: false,
-      error: "Open the popup from the installed browser extension.",
-    });
+  if (typeof runtime?.sendMessage !== "function") {
+    return fetchBackendHealthDirectly();
   }
 
   return new Promise((resolve) => {
@@ -211,5 +390,54 @@ export function checkBackendHealth(): Promise<{
             : "Could not check the backend connection.",
       });
     }
+
   });
+}
+
+async function fetchBackendHealthDirectly(): Promise<{
+  connected: boolean;
+  error?: string;
+}> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5_000);
+
+  try {
+    const response = await fetch(BACKEND_HEALTH_URL, {
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      return {
+        connected: false,
+        error: `Backend health check failed (${response.status}).`,
+      };
+    }
+
+    const health: unknown = await response.json();
+    if (
+      typeof health !== "object" ||
+      health === null ||
+      !("status" in health) ||
+      health.status !== "ok"
+    ) {
+      return {
+        connected: false,
+        error: "The backend did not respond as healthy.",
+      };
+    }
+
+    return { connected: true };
+  } catch (error) {
+    return {
+      connected: false,
+      error:
+        error instanceof Error && error.name === "AbortError"
+          ? "Backend health check timed out."
+          : error instanceof Error
+            ? error.message
+            : "Could not check the backend connection.",
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
 }

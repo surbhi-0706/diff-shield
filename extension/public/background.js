@@ -103,6 +103,47 @@ async function checkBackendHealth() {
   return health;
 }
 
+async function getQuarantines() {
+  const result = await requestBackend("/api/quarantines");
+  if (!Array.isArray(result.items)) {
+    throw new Error("The DiffShield backend returned invalid quarantine data.");
+  }
+  await storeValues({ quarantineData: result });
+  return result;
+}
+
+async function getGitHubStatus(repository) {
+  const suffix =
+    typeof repository === "string" && repository
+      ? `?repository=${encodeURIComponent(repository)}`
+      : "";
+  const result = await requestBackend(`/api/github/status${suffix}`);
+  if (typeof result.app_configured !== "boolean") {
+    throw new Error("The DiffShield backend returned invalid GitHub App status.");
+  }
+  return result;
+}
+
+async function getQuarantine(findingId) {
+  if (typeof findingId !== "string" || !/^DS-[A-Z0-9-]+$/.test(findingId)) {
+    throw new Error("The requested DiffShield finding identity is invalid.");
+  }
+  return requestBackend(`/api/quarantines/${encodeURIComponent(findingId)}`);
+}
+
+function getCachedQuarantines() {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.get("quarantineData", (items) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+
+      resolve(items.quarantineData || null);
+    });
+  });
+}
+
 async function analyzePullRequest(prUrl, requestId) {
   if (!isGitHubPullRequestUrl(prUrl)) {
     throw new Error("Only GitHub pull request URLs can be analyzed.");
@@ -117,7 +158,11 @@ async function analyzePullRequest(prUrl, requestId) {
   if (typeof result.status !== "string") {
     throw new Error("The DiffShield backend returned an invalid scan result.");
   }
-  if (result.status !== "PASSED" && result.status !== "QUARANTINE_HOLD") {
+  if (
+    result.status !== "PASSED" &&
+    result.status !== "QUARANTINE_HOLD" &&
+    result.status !== "RESOLVED"
+  ) {
     throw new Error("The DiffShield backend returned an unknown scan status.");
   }
   if (requestId !== latestAnalysisRequest) return result;
@@ -134,6 +179,35 @@ async function analyzePullRequest(prUrl, requestId) {
       finding: result.finding,
     },
   };
+  if (result.quarantine) {
+    const cached = await getCachedQuarantines();
+    const previousItems = Array.isArray(cached?.items) ? cached.items : [];
+    const activeStates = [
+      "QUARANTINED",
+      "REVIEW_REQUIRED",
+      "ESCALATED",
+      "REJECTED",
+    ];
+    const quarantineIsActive = activeStates.includes(result.quarantine.state);
+    values.quarantineData = {
+      items: [
+        ...previousItems.filter((item) => {
+          if (
+            item.finding_id === result.quarantine.finding_id ||
+            (item.repository === result.quarantine.repository &&
+              item.pr_number === result.quarantine.pr_number &&
+              !quarantineIsActive &&
+              activeStates.includes(item.state))
+          ) {
+            return false;
+          }
+          return true;
+        }),
+        ...(quarantineIsActive ? [result.quarantine] : []),
+      ],
+      merge_protection: result.merge_protection,
+    };
+  }
 
   const hasFinding =
     result.status === "QUARANTINE_HOLD" &&
@@ -180,6 +254,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   let analysisRequestId;
   if (message.type === "DIFF_SHIELD_BACKEND_HEALTH") {
     task = checkBackendHealth();
+  } else if (message.type === "DIFF_SHIELD_GITHUB_STATUS") {
+    task = getGitHubStatus(message.repository);
+  } else if (message.type === "DIFF_SHIELD_LIST_QUARANTINES") {
+    task = getQuarantines();
+  } else if (message.type === "DIFF_SHIELD_GET_QUARANTINE") {
+    task = getQuarantine(message.findingId);
+  } else if (message.type === "DIFF_SHIELD_CACHED_QUARANTINES") {
+    task = getCachedQuarantines();
   } else if (message.type === "DIFF_SHIELD_ANALYZE_PR") {
     const senderUrl = sender.url || sender.tab?.url;
     if (!refersToSamePullRequest(message.prUrl, senderUrl)) {
