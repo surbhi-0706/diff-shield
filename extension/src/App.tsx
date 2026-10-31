@@ -126,7 +126,7 @@ function App() {
   }
 
   return (
-    <main className="app">
+    <main className="app ds-motion">
       <header className="header">
         <div className="brand">
           <div className="logo">
@@ -287,7 +287,7 @@ function App() {
 
               return (
                 <button
-                  className="feature-row"
+                  className="feature-row ds-motion-card"
                   key={feature.id}
                   onClick={() => setPage(feature.id)}
                   aria-label={`Learn about ${feature.title}`}

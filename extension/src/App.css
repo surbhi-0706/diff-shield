@@ -694,3 +694,1210 @@ button {
   box-shadow: 0 0 20px var(--glow);
   transform: translateY(-1px);
 }
+
+/* ==========================================
+   DIFF SHIELD — CINEMATIC CRIMSON MOTION
+   ========================================== */
+
+/* Smooth transitions for interactive elements */
+
+button,
+[role="button"] {
+  transition:
+    transform 180ms ease,
+    box-shadow 250ms ease,
+    border-color 250ms ease,
+    background-color 250ms ease,
+    color 250ms ease;
+}
+
+/* Button hover */
+
+button:hover,
+[role="button"]:hover {
+  border-color: #ff454f;
+  box-shadow: 0 0 14px rgba(255, 69, 79, 0.12);
+}
+
+/* Button press */
+
+button:active,
+[role="button"]:active {
+  transform: scale(0.97);
+}
+
+/* Smooth card hover */
+
+.ds-glow-card {
+  transition:
+    transform 250ms ease,
+    border-color 250ms ease,
+    box-shadow 250ms ease;
+}
+
+.ds-glow-card:hover {
+  transform: translateY(-3px);
+  border-color: #ff454f;
+  box-shadow:
+    0 8px 24px rgba(255, 69, 79, 0.08),
+    0 0 12px rgba(255, 69, 79, 0.06);
+}
+
+/* Crimson animated underline */
+
+.ds-animated-line {
+  position: relative;
+  overflow: hidden;
+}
+
+.ds-animated-line::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+
+  background: linear-gradient(
+    90deg,
+    transparent,
+    #ff454f,
+    #ff786a,
+    transparent
+  );
+
+  transform: scaleX(0);
+  transform-origin: left;
+
+  transition: transform 300ms ease;
+}
+
+.ds-animated-line:hover::after {
+  transform: scaleX(1);
+}
+
+/* Smooth appearance */
+
+.ds-motion {
+  animation: ds-popup-enter 420ms ease both;
+}
+
+.ds-motion-card {
+  animation: ds-card-enter 400ms ease both;
+}
+
+.ds-motion-card:nth-child(1) {
+  animation-delay: 50ms;
+}
+
+.ds-motion-card:nth-child(2) {
+  animation-delay: 100ms;
+}
+
+.ds-motion-card:nth-child(3) {
+  animation-delay: 150ms;
+}
+
+.ds-motion-card:nth-child(4) {
+  animation-delay: 200ms;
+}
+
+/* Security indicator */
+
+.ds-status-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: #ff454f;
+  box-shadow: 0 0 8px rgba(255, 69, 79, 0.5);
+
+  animation: ds-status-pulse 2.2s ease-in-out infinite;
+}
+
+/* Respect reduced-motion preferences */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+/* ==========================================
+   DIFF SHIELD — VISIBLE MOTION EFFECTS
+   ========================================== */
+
+/* Main popup entrance */
+@keyframes ds-popup-enter {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.98);
+    filter: brightness(0.65);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: brightness(1);
+  }
+}
+
+/* Feature cards appear one after another */
+@keyframes ds-card-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Pulsing security indicator */
+@keyframes ds-status-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 4px rgba(255, 69, 79, 0.35);
+  }
+
+  50% {
+    opacity: 0.65;
+    box-shadow:
+      0 0 12px rgba(255, 69, 79, 0.8),
+      0 0 22px rgba(255, 69, 79, 0.25);
+  }
+}
+
+/* Activate the popup entrance */
+.app.ds-motion {
+  animation: ds-popup-enter 650ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+/* Feature rows animate into view */
+.feature-row.ds-motion-card {
+  animation: ds-card-enter 550ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+/* Stagger the feature row animations */
+.feature-row.ds-motion-card:nth-of-type(1) {
+  animation-delay: 100ms;
+}
+
+.feature-row.ds-motion-card:nth-of-type(2) {
+  animation-delay: 200ms;
+}
+
+.feature-row.ds-motion-card:nth-of-type(3) {
+  animation-delay: 300ms;
+}
+
+.feature-row.ds-motion-card:nth-of-type(4) {
+  animation-delay: 400ms;
+}
+
+/* Crimson scanning light across the header */
+.header {
+  position: relative;
+  overflow: hidden;
+}
+
+.header::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -120%;
+  width: 65%;
+  pointer-events: none;
+
+  background: linear-gradient(
+    110deg,
+    transparent 0%,
+    rgba(255, 69, 79, 0.04) 35%,
+    rgba(255, 69, 79, 0.2) 50%,
+    rgba(255, 120, 106, 0.06) 65%,
+    transparent 100%
+  );
+
+  animation: ds-header-scan 3.5s ease-in-out 700ms infinite;
+}
+
+@keyframes ds-header-scan {
+  0% {
+    left: -120%;
+  }
+
+  65%,
+  100% {
+    left: 160%;
+  }
+}
+
+/* More dramatic crimson hover on feature rows */
+.feature-row {
+  transition:
+    transform 220ms ease,
+    border-color 220ms ease,
+    background-color 220ms ease,
+    box-shadow 220ms ease;
+}
+
+.feature-row:hover {
+  transform: translateX(5px);
+  border-color: #ff454f;
+  box-shadow:
+    0 0 14px rgba(255, 69, 79, 0.12),
+    inset 3px 0 0 #ff454f;
+}
+
+/* Accessibility: respect reduced-motion settings */
+@media (prefers-reduced-motion: reduce) {
+  .app.ds-motion,
+  .feature-row.ds-motion-card,
+  .header::after {
+    animation: none !important;
+  }
+
+  .feature-row {
+    transition: none !important;
+  }
+}
+/* ==========================================
+   DIFF SHIELD — LIVE CYBERSECURITY ATMOSPHERE
+   ========================================== */
+
+/* Slowly shifting crimson atmosphere */
+.app {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.app::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+
+  background:
+    radial-gradient(
+      ellipse at 15% 10%,
+      rgba(255, 45, 65, 0.12),
+      transparent 45%
+    ),
+    radial-gradient(
+      ellipse at 90% 55%,
+      rgba(180, 20, 45, 0.08),
+      transparent 40%
+    );
+
+  animation: crimson-atmosphere 8s ease-in-out infinite alternate;
+}
+
+@keyframes crimson-atmosphere {
+  from {
+    opacity: 0.45;
+    transform: scale(1);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+/* Scanning beam across the dashboard */
+.header {
+  position: relative;
+  overflow: hidden;
+}
+
+.header::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -100%;
+  width: 60%;
+  pointer-events: none;
+
+  background: linear-gradient(
+    100deg,
+    transparent,
+    rgba(255, 69, 79, 0.08),
+    rgba(255, 69, 79, 0.38),
+    rgba(255, 120, 106, 0.08),
+    transparent
+  );
+
+  animation: crimson-scan 4s ease-in-out infinite;
+}
+
+@keyframes crimson-scan {
+  0%, 15% {
+    left: -100%;
+  }
+
+  80%, 100% {
+    left: 150%;
+  }
+}
+
+/* Glowing metric cards */
+.metric-card,
+.stat-card,
+.dashboard-card {
+  transition:
+    transform 250ms ease,
+    border-color 250ms ease,
+    box-shadow 250ms ease;
+}
+
+.metric-card:hover,
+.stat-card:hover,
+.dashboard-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(255, 69, 79, 0.85);
+
+  box-shadow:
+    0 8px 28px rgba(255, 45, 65, 0.12),
+    0 0 12px rgba(255, 69, 79, 0.08);
+}
+
+/* Security finding cards */
+.finding-card,
+.alert-card {
+  transition:
+    transform 220ms ease,
+    border-color 220ms ease,
+    box-shadow 220ms ease;
+}
+
+.finding-card:hover,
+.alert-card:hover {
+  transform: translateY(-3px);
+  border-color: #ff454f;
+
+  box-shadow:
+    0 0 24px rgba(255, 45, 65, 0.12),
+    inset 3px 0 0 #ff454f;
+}
+
+/* Glowing security shield */
+.logo,
+.brand-icon,
+.feature-icon {
+  transition:
+    transform 250ms ease,
+    filter 250ms ease;
+}
+
+.logo:hover,
+.brand-icon:hover,
+.feature-icon:hover {
+  transform: scale(1.06);
+
+  filter: drop-shadow(
+    0 0 9px rgba(255, 69, 79, 0.7)
+  );
+}
+
+/* Button interaction */
+button {
+  transition:
+    transform 180ms ease,
+    box-shadow 220ms ease,
+    border-color 220ms ease;
+}
+
+button:hover {
+  box-shadow: 0 0 14px rgba(255, 69, 79, 0.18);
+}
+
+button:active {
+  transform: scale(0.97);
+}
+
+/* Accessible motion settings */
+@media (prefers-reduced-motion: reduce) {
+  .app::before,
+  .header::after {
+    animation: none !important;
+  }
+
+  .metric-card,
+  .stat-card,
+  .dashboard-card,
+  .finding-card,
+  .alert-card,
+  button {
+    transition: none !important;
+  }
+}
+/* ==========================================================
+   DIFF SHIELD — CINEMATIC CYBERPUNK UI
+   Crimson / Electric Violet / Obsidian
+   ========================================================== */
+
+:root {
+  --ds-bg: #09070c;
+  --ds-surface: #120d16;
+  --ds-card: #19111e;
+  --ds-card-hover: #211427;
+
+  --ds-crimson: #ff354f;
+  --ds-crimson-light: #ff6477;
+  --ds-violet: #b56cff;
+  --ds-cyan: #83f4e8;
+
+  --ds-text: #fbf7ff;
+  --ds-muted: #b8a9c3;
+  --ds-border: rgba(190, 125, 190, 0.19);
+
+  --ds-glow-red: 0 0 24px rgba(255, 53, 79, 0.17);
+  --ds-glow-violet: 0 0 24px rgba(181, 108, 255, 0.14);
+
+  --ds-radius: 12px;
+  --ds-transition: 220ms cubic-bezier(0.2, 0.75, 0.25, 1);
+}
+
+/* ---------- GLOBAL FOUNDATION ---------- */
+
+html {
+  scroll-behavior: smooth;
+  background: var(--ds-bg);
+}
+
+body {
+  background: var(--ds-bg);
+  color: var(--ds-text);
+  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::selection {
+  color: #fff;
+  background: rgba(255, 53, 79, 0.45);
+}
+
+/* ---------- AMBIENT BACKGROUND ---------- */
+
+.app {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  color: var(--ds-text);
+  background:
+    radial-gradient(
+      ellipse at 5% 0%,
+      rgba(255, 53, 79, 0.105),
+      transparent 35%
+    ),
+    radial-gradient(
+      ellipse at 100% 35%,
+      rgba(181, 108, 255, 0.075),
+      transparent 36%
+    ),
+    linear-gradient(160deg, #0b080e 0%, #09070c 55%, #100912 100%);
+}
+
+/* Fine technical grid */
+
+.app::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+
+  background-image:
+    linear-gradient(
+      rgba(255, 255, 255, 0.018) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.018) 1px,
+      transparent 1px
+    );
+
+  background-size: 28px 28px;
+  mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.9),
+    transparent 85%
+  );
+}
+
+/* ---------- TYPOGRAPHY ---------- */
+
+h1,
+h2,
+h3,
+h4,
+.page-header h1,
+.section-heading h2 {
+  color: var(--ds-text);
+  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.045em;
+  text-wrap: balance;
+}
+
+h1 {
+  line-height: 1.12;
+}
+
+h2,
+h3 {
+  line-height: 1.25;
+}
+
+p {
+  color: var(--ds-muted);
+  line-height: 1.65;
+}
+
+.brand h1 {
+  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+}
+
+.brand span {
+  color: var(--ds-muted);
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+/* Technical labels */
+
+.section-heading p,
+.feature-subtitle,
+.finding-id,
+.finding-meta,
+.badge,
+.status-label {
+  letter-spacing: 0.045em;
+}
+
+/* ---------- HEADER ---------- */
+
+.header {
+  position: relative;
+  border-bottom: 1px solid var(--ds-border);
+  background: rgba(12, 8, 15, 0.78);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.header::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 34%;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    var(--ds-crimson),
+    var(--ds-violet),
+    transparent
+  );
+  animation: ds-header-line 5s ease-in-out infinite alternate;
+}
+
+.brand {
+  gap: 12px;
+}
+
+.logo {
+  position: relative;
+  display: grid;
+  place-items: center;
+  color: var(--ds-crimson);
+  background: linear-gradient(
+    145deg,
+    rgba(255, 53, 79, 0.18),
+    rgba(181, 108, 255, 0.08)
+  );
+  border: 1px solid rgba(255, 53, 79, 0.42);
+  border-radius: 9px;
+  box-shadow: 0 0 18px rgba(255, 53, 79, 0.08);
+  transition:
+    transform var(--ds-transition),
+    box-shadow var(--ds-transition),
+    border-color var(--ds-transition);
+}
+
+.logo:hover {
+  transform: rotate(-5deg) scale(1.06);
+  border-color: var(--ds-crimson-light);
+  box-shadow: var(--ds-glow-red);
+}
+
+/* ---------- BUTTONS ---------- */
+
+button,
+[role="button"] {
+  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  transition:
+    transform var(--ds-transition),
+    background var(--ds-transition),
+    border-color var(--ds-transition),
+    box-shadow var(--ds-transition),
+    color var(--ds-transition),
+    opacity var(--ds-transition);
+}
+
+button:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid var(--ds-violet);
+  outline-offset: 3px;
+}
+
+.primary-button {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+
+  min-height: 38px;
+  padding: 10px 16px;
+
+  color: #fff;
+  background: linear-gradient(
+    115deg,
+    #e92645 0%,
+    #ff354f 52%,
+    #c82a68 100%
+  );
+
+  border: 1px solid rgba(255, 120, 145, 0.5);
+  border-radius: 8px;
+
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.015em;
+
+  box-shadow: 0 4px 15px rgba(255, 53, 79, 0.12);
+}
+
+.primary-button::before {
+  content: "";
+  position: absolute;
+  top: -80%;
+  left: -65%;
+  z-index: -1;
+
+  width: 42%;
+  height: 260%;
+
+  background: rgba(255, 255, 255, 0.22);
+  transform: rotate(25deg);
+  transition: left 500ms ease;
+}
+
+.primary-button:hover::before {
+  left: 135%;
+}
+
+.primary-button:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 7px 24px rgba(255, 53, 79, 0.27),
+    0 0 16px rgba(255, 53, 79, 0.12);
+}
+
+.primary-button:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  min-width: 38px;
+  min-height: 38px;
+
+  color: #d7c6e0;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--ds-border);
+  border-radius: 9px;
+}
+
+.icon-button:hover {
+  color: #fff;
+  background: rgba(255, 53, 79, 0.11);
+  border-color: rgba(255, 53, 79, 0.6);
+  box-shadow: 0 0 18px rgba(255, 53, 79, 0.11);
+  transform: translateY(-1px);
+}
+
+.icon-button:active {
+  transform: scale(0.95);
+}
+
+/* ---------- CARDS ---------- */
+
+.activity-section,
+.detail-page {
+  animation: ds-page-enter 480ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+.activity-section {
+  position: relative;
+}
+
+.section-heading {
+  margin-bottom: 14px;
+}
+
+.section-heading h2 {
+  font-size: 19px;
+}
+
+.section-heading p {
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.feature-row,
+.finding-card,
+.alert-card,
+.protection-card,
+.status-card,
+.stat-card,
+.activity-card {
+  position: relative;
+  overflow: hidden;
+
+  background: linear-gradient(
+    140deg,
+    rgba(34, 20, 38, 0.94),
+    rgba(19, 12, 22, 0.96)
+  );
+
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius);
+
+  transition:
+    transform 260ms cubic-bezier(0.2, 0.75, 0.25, 1),
+    border-color 260ms ease,
+    box-shadow 260ms ease,
+    background 260ms ease;
+}
+
+/* A small highlight at the top of cards */
+
+.feature-row::before,
+.finding-card::before,
+.alert-card::before,
+.protection-card::before,
+.status-card::before,
+.activity-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+
+  width: 100%;
+  height: 1px;
+
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 100, 119, 0.55),
+    rgba(181, 108, 255, 0.42),
+    transparent
+  );
+
+  opacity: 0.35;
+  transition: opacity 250ms ease;
+}
+
+.feature-row:hover,
+.finding-card:hover,
+.alert-card:hover,
+.protection-card:hover,
+.status-card:hover,
+.activity-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(255, 100, 119, 0.48);
+
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.22),
+    0 0 20px rgba(255, 53, 79, 0.065);
+}
+
+.feature-row:hover::before,
+.finding-card:hover::before,
+.alert-card:hover::before,
+.protection-card:hover::before,
+.status-card:hover::before,
+.activity-card:hover::before {
+  opacity: 1;
+}
+
+/* ---------- FEATURE NAVIGATION ---------- */
+
+.feature-row {
+  min-height: 58px;
+  padding: 12px;
+  border-radius: 10px;
+}
+
+.feature-row:hover {
+  background: linear-gradient(
+    105deg,
+    rgba(255, 53, 79, 0.09),
+    rgba(181, 108, 255, 0.07)
+  );
+}
+
+.feature-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+
+  color: var(--ds-crimson);
+  background: rgba(255, 53, 79, 0.09);
+  border: 1px solid rgba(255, 53, 79, 0.18);
+  border-radius: 9px;
+
+  transition:
+    transform 250ms ease,
+    color 250ms ease,
+    background 250ms ease,
+    box-shadow 250ms ease;
+}
+
+.feature-row:hover .feature-icon {
+  color: #fff;
+  background: rgba(255, 53, 79, 0.2);
+  box-shadow: 0 0 15px rgba(255, 53, 79, 0.12);
+  transform: scale(1.06);
+}
+
+.feature-title {
+  color: var(--ds-text);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.feature-subtitle {
+  display: block;
+  margin-top: 3px;
+  color: var(--ds-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.feature-row > svg:last-child {
+  color: #8f7c9b;
+  transition:
+    transform 220ms ease,
+    color 220ms ease;
+}
+
+.feature-row:hover > svg:last-child {
+  color: var(--ds-crimson-light);
+  transform: translateX(3px);
+}
+
+/* ---------- SECURITY FINDINGS ---------- */
+
+.finding-card {
+  margin-bottom: 12px;
+  padding: 15px;
+  animation: ds-card-enter 520ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+/* Cascade the entry animation across visible findings */
+
+.finding-card:nth-child(2) {
+  animation-delay: 70ms;
+}
+
+.finding-card:nth-child(3) {
+  animation-delay: 140ms;
+}
+
+.finding-card:nth-child(4) {
+  animation-delay: 210ms;
+}
+
+.finding-card h3 {
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.finding-card p {
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+/* Severity badges */
+
+.badge,
+.severity-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  padding: 5px 8px;
+  border-radius: 5px;
+
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.badge-high,
+.severity-high,
+.badge.high {
+  color: #ff8796;
+  background: rgba(255, 53, 79, 0.1);
+  border: 1px solid rgba(255, 53, 79, 0.3);
+}
+
+.badge-medium,
+.severity-medium,
+.badge.medium {
+  color: #ffc77c;
+  background: rgba(255, 177, 75, 0.08);
+  border: 1px solid rgba(255, 177, 75, 0.25);
+}
+
+/* ---------- STATUS INDICATORS ---------- */
+
+/*
+  Apply .ds-status-dot to an actual status indicator
+  only when the underlying status is accurate.
+*/
+
+.ds-status-dot {
+  position: relative;
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+
+  background: var(--ds-cyan);
+  border-radius: 50%;
+  box-shadow: 0 0 10px rgba(131, 244, 232, 0.5);
+}
+
+.ds-status-dot::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+
+  border: 1px solid currentColor;
+  border-radius: 50%;
+
+  animation: ds-status-pulse 2s ease-out infinite;
+}
+
+/* Don't imply that an unconnected scanner is active. */
+.ds-status-dot.is-offline {
+  color: var(--ds-crimson);
+  background: var(--ds-crimson);
+  box-shadow: 0 0 8px rgba(255, 53, 79, 0.35);
+}
+
+/* ---------- COUNTERS ---------- */
+
+.stat-card,
+.stat-item,
+.metric-card {
+  transition:
+    transform 220ms ease,
+    border-color 220ms ease,
+    background 220ms ease;
+}
+
+.stat-card:hover,
+.stat-item:hover,
+.metric-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(181, 108, 255, 0.4);
+  background: linear-gradient(
+    140deg,
+    rgba(181, 108, 255, 0.09),
+    rgba(255, 53, 79, 0.055)
+  );
+}
+
+/* ---------- DETAIL PAGES ---------- */
+
+.detail-page {
+  animation-name: ds-detail-enter;
+  animation-duration: 380ms;
+}
+
+.page-header {
+  margin-bottom: 18px;
+}
+
+.page-header h1 {
+  font-size: 23px;
+}
+
+.page-header button {
+  transition:
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.page-header button:hover {
+  color: var(--ds-crimson-light);
+  transform: translateX(-2px);
+}
+
+/* ---------- SETTINGS CONTROLS ---------- */
+
+input,
+select,
+textarea {
+  color: var(--ds-text);
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid var(--ds-border);
+  border-radius: 8px;
+
+  transition:
+    border-color 200ms ease,
+    box-shadow 200ms ease,
+    background 200ms ease;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--ds-violet);
+  box-shadow: 0 0 0 3px rgba(181, 108, 255, 0.1);
+}
+
+/* ---------- SCROLLBAR ---------- */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #583044 #100b13;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: #100b13;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    180deg,
+    #ff354f,
+    #7d3d9b
+  );
+  border-radius: 20px;
+}
+
+/* ---------- ANIMATION DEFINITIONS ---------- */
+
+@keyframes ds-page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(9px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ds-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.99);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes ds-detail-enter {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes ds-status-pulse {
+  0% {
+    transform: scale(0.75);
+    opacity: 0.8;
+  }
+
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+
+@keyframes ds-header-line {
+  0% {
+    opacity: 0.45;
+    transform: scaleX(0.65);
+    transform-origin: left;
+  }
+
+  100% {
+    opacity: 1;
+    transform: scaleX(1);
+    transform-origin: left;
+  }
+}
+
+/* ---------- ACCESSIBILITY ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

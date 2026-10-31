@@ -1,31 +1,303 @@
+/* =========================================
+   DIFF SHIELD — CRIMSON MOTION SYSTEM
+   ========================================= */
 
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 :root {
-  font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
-  color: #fff1f2;
-  background: #0a0709;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  --motion-bg: #0a0709;
+  --motion-card: #1a1014;
+  --motion-elevated: #241319;
+
+  --motion-red: #ff454f;
+  --motion-red-light: #ff786a;
+  --motion-border: #43232b;
+
+  --motion-text: #fff1f2;
+  --motion-muted: #c4a6ab;
+
+  --motion-fast: 160ms;
+  --motion-normal: 260ms;
+  --motion-slow: 450ms;
+
+  --motion-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
+
+/* Smooth scrolling */
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* Consistent animation behavior */
 
 * {
-  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
 }
 
-html,
-body,
-#root {
-  margin: 0;
-  width: 100%;
-  min-width: 350px;
-  min-height: 100%;
+/* =========================================
+   1. POPUP ENTRANCE
+   ========================================= */
+
+@keyframes ds-popup-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-body {
-  background: #0b0d0f;
+@keyframes ds-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-button {
-  font: inherit;
+/* Add this class to the main popup container */
+
+.ds-motion {
+  animation: ds-popup-enter 420ms var(--motion-ease) both;
+}
+
+/* Add this class to individual cards */
+
+.ds-motion-card {
+  animation: ds-card-enter 400ms var(--motion-ease) both;
+}
+
+/* Stagger card entrances */
+
+.ds-motion-card:nth-child(1) {
+  animation-delay: 50ms;
+}
+
+.ds-motion-card:nth-child(2) {
+  animation-delay: 100ms;
+}
+
+.ds-motion-card:nth-child(3) {
+  animation-delay: 150ms;
+}
+
+.ds-motion-card:nth-child(4) {
+  animation-delay: 200ms;
+}
+
+.ds-motion-card:nth-child(5) {
+  animation-delay: 250ms;
+}
+
+/* =========================================
+   2. CRIMSON GLOW CARDS
+   ========================================= */
+
+.ds-glow-card {
+  position: relative;
+  overflow: hidden;
+
+  background: var(--motion-card);
+  border: 1px solid var(--motion-border);
+  border-radius: 12px;
+
+  transition:
+    transform var(--motion-normal) var(--motion-ease),
+    border-color var(--motion-normal) ease,
+    box-shadow var(--motion-normal) ease;
+}
+
+.ds-glow-card:hover {
+  transform: translateY(-3px);
+
+  border-color: var(--motion-red);
+
+  box-shadow:
+    0 8px 24px rgba(255, 69, 79, 0.08),
+    0 0 12px rgba(255, 69, 79, 0.06);
+}
+
+/* =========================================
+   3. BUTTON MICRO-INTERACTIONS
+   ========================================= */
+
+.ds-motion-button {
+  position: relative;
+  overflow: hidden;
+
+  transition:
+    transform var(--motion-fast) ease,
+    background-color var(--motion-normal) ease,
+    border-color var(--motion-normal) ease,
+    box-shadow var(--motion-normal) ease;
+
+  cursor: pointer;
+}
+
+.ds-motion-button:hover {
+  transform: translateY(-1px);
+
+  box-shadow:
+    0 4px 18px rgba(255, 69, 79, 0.18);
+}
+
+.ds-motion-button:active {
+  transform: scale(0.97);
+}
+
+.ds-motion-button:focus-visible {
+  outline: 2px solid var(--motion-red-light);
+  outline-offset: 3px;
+}
+
+/* =========================================
+   4. PULSING SECURITY INDICATOR
+   ========================================= */
+
+@keyframes ds-status-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(255, 69, 79, 0.35);
+  }
+
+  50% {
+    opacity: 0.8;
+    box-shadow: 0 0 0 5px rgba(255, 69, 79, 0);
+  }
+}
+
+.ds-status-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+
+  border-radius: 50%;
+  background: var(--motion-red);
+
+  animation: ds-status-pulse 2.2s ease-in-out infinite;
+}
+
+/* =========================================
+   5. SCANNING LINE
+   ========================================= */
+
+.ds-scan-panel {
+  position: relative;
+  overflow: hidden;
+}
+
+.ds-scan-panel::after {
+  content: "";
+
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+
+  height: 2px;
+
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--motion-red),
+    var(--motion-red-light),
+    transparent
+  );
+
+  box-shadow: 0 0 12px rgba(255, 69, 79, 0.5);
+
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Only apply this class while a real scan is running */
+
+.ds-scan-panel.is-scanning::after {
+  opacity: 1;
+  animation: ds-scan-line 2.2s linear infinite;
+}
+
+@keyframes ds-scan-line {
+  from {
+    transform: translateY(0);
+  }
+
+  to {
+    transform: translateY(240px);
+  }
+}
+
+/* =========================================
+   6. ALERT ANIMATION
+   ========================================= */
+
+@keyframes ds-alert-enter {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.ds-alert {
+  animation: ds-alert-enter 300ms var(--motion-ease) both;
+
+  border-left: 2px solid var(--motion-red);
+  background: rgba(255, 69, 79, 0.055);
+
+  transition:
+    background-color var(--motion-normal) ease,
+    border-color var(--motion-normal) ease;
+}
+
+.ds-alert:hover {
+  background: rgba(255, 69, 79, 0.1);
+  border-left-color: var(--motion-red-light);
+}
+
+/* =========================================
+   7. SMOOTH EXPANDABLE CONTENT
+   ========================================= */
+
+.ds-expand-content {
+  animation: ds-card-enter 240ms var(--motion-ease) both;
+}
+
+/* =========================================
+   8. SUBTLE TEXT GLOW
+   ========================================= */
+
+.ds-text-glow {
+  color: var(--motion-red-light);
+
+  text-shadow:
+    0 0 10px rgba(255, 69, 79, 0.18);
+}
+
+/* =========================================
+   9. REDUCED MOTION ACCESSIBILITY
+   ========================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }
