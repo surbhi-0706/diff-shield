@@ -35,7 +35,7 @@
 
 **DiffShield** acts as an active security defense line on pull requests. While traditional SAST scanners look for known static signatures, attackers and well-meaning contributors often silently undo security controls—such as removing input sanitizers, bypassing authentication checks, dropping rate limiters, or disabling CSRF protections.
 
-DiffShield uses a **deterministic AST and block-level diff parser** alongside a **historical patch intelligence engine** to detect when a security guard around a vulnerable sink has been stripped or degraded. If a regression is found, DiffShield alerts security reviewers directly in GitHub and provides **1-click rollback snapshots**.
+DiffShield uses an AST and block-level diff parser alongside a historical patch intelligence engine to detect when a security guard around a vulnerable sink has been stripped or degraded. If a regression is found, DiffShield alerts security reviewers directly in GitHub and stores a reverse patch for recovery.
 
 ---
 
@@ -81,7 +81,7 @@ flowchart TD
     BlockEng --> RegEng
     RegEng -->|Verdict & Risk Score| API
     API -->|Auto-Archive Snapshot| Vault
-    Vault -.->|1-Click Rollback Diff| API
+    Vault -.->|Reverse Patch Retrieval| API
     API -->|JSON Verdict & Finding ID| CS
 ```
 
@@ -98,7 +98,7 @@ flowchart TD
   - Weak Cryptography (downgrades to MD5, SHA1, DES)
   - Prototype Pollution & Code Injection (`eval`, `exec`, `new Function`)
   - XML External Entity (XXE) and Insecure Deserialization (Pickle, YAML, Java ObjectInputStream)
-- 💾 **Snapshot Vault & 1-Click Rollback**: Automatically archives clean pre-PR baselines into an isolated SQLite vault and computes reverse patches for instantaneous rollback of dangerous PRs.
+- 💾 **Snapshot Vault & Reverse Patches**: Archives PR diffs and computes reverse patches. A full baseline is included only when a caller supplies `clean_code`; GitHub PR scans do not fetch or store the full repository source.
 - 🎨 **Sleek Emerald Dark Extension UI**: Manifest v3 extension with glassmorphism design, threat badges, severity meters, and detailed remediation advice.
 - 🧪 **Exhaustive Automated Verification**: Over 74 test assertions covering diff parsing, edge-case collisions, and rollback integrity.
 
@@ -130,7 +130,7 @@ diff-shield/
 ├── backend/
 │   ├── block_parser.py         # Multi-language AST block parser & language detector
 │   ├── regression_engine.py    # Rule-based guard regression & CVE detection engine
-│   ├── snapshot_vault.py       # SQLite snapshot archiving & 1-click rollback generator
+│   ├── snapshot_vault.py       # SQLite snapshot archiving & reverse-patch generator
 │   ├── main.py                 # FastAPI application & GitHub PR fetching endpoints
 │   ├── test_diffshield.py      # Automated test suite (74 unit & integration checks)
 │   └── requirements.txt        # Backend Python dependencies
@@ -223,18 +223,7 @@ DiffShield comes with a comprehensive test suite covering all supported programm
 ```bash
 cd backend
 python test_diffshield.py
-```
-
-Expected output:
-```text
-======================================================================
-DiffShield Verification Suite
-======================================================================
-Running tests...
-Ran 74 tests in 0.42s
-
-OK (74/74 assertions passed)
-======================================================================
+python -m unittest test_api
 ```
 
 ---
@@ -270,38 +259,60 @@ Content-Type: application/json
 **Request Body:**
 ```json
 {
-  "pr_url": "https://github.com/owner/repo/pull/42",
-  "diff_text": "@@ -10,3 +10,2 @@\n-  if (isValid(target)) {\n     window.location = target;\n-  }",
-  "repository": "owner/repo",
-  "pr_number": 42,
-  "file_path": "src/redirect.js",
-  "clean_code": "function redirect(target) { if (isValid(target)) { window.location = target; } }"
+  "pr_url": "https://github.com/owner/repo/pull/42"
 }
 ```
+
+Provide either `pr_url` or `diff_text`, not both. `pr_url` must be an HTTPS
+GitHub pull-request URL. Optionally provide `clean_code` when a source baseline
+is available.
 
 **Response:**
 ```json
 {
-  "verdict": "VULNERABILITY_REGRESSION_DETECTED",
-  "risk_score": 85,
-  "quarantined": true,
+  "status": "QUARANTINE_HOLD",
+  "is_regression": true,
+  "risk_score": 92,
+  "hold_hours": 12,
+  "explanation": "Security guard regression detected in src/redirect.js.",
+  "recommended_action": "Re-introduce the removed security guard.",
   "finding": {
-    "id": "DS-CWE-601-...",
-    "category": "OPEN_REDIRECT",
-    "cve_cwe": "CWE-601",
+    "id": "DS-1234ABCD",
+    "title": "DOM XSS Guard Regression",
+    "repository": "owner/repo",
+    "description": "A HIGH-severity guard regression was detected.",
     "severity": "HIGH",
-    "title": "Open Redirect Guard Regression",
-    "remediation": "Validate redirect target against an allowlist of known-safe origins."
+    "cve_cwe": "CWE-79",
+    "language": "JavaScript/TypeScript",
+    "file_path": "src/redirect.js",
+    "dropped_categories": ["DOM_XSS"]
   },
-  "snapshot_id": 1,
+  "all_dropped": [
+    {
+      "category": "DOM_XSS",
+      "severity": "HIGH",
+      "cve_cwe": "CWE-79",
+      "title": "DOM XSS Guard Regression",
+      "language": "JavaScript/TypeScript",
+      "file_path": "src/render.js",
+      "remediation": "Use textContent instead of innerHTML. Apply DOMPurify sanitization."
+    }
+  ],
   "repository": "owner/repo",
-  "pr_number": 42
+  "pr_number": 42,
+  "file_path": "unknown",
+  "snapshot_id": 1,
+  "baseline_available": false,
+  "diff_length": 1234
 }
 ```
 
+Risk scores are stable for a given severity. A clean scan returns `status:
+PASSED`, `risk_score: 8`, and `finding: null`.
+
 ---
 
-### 1-Click Rollback Retrieval
+### Reverse Patch Retrieval
 ```http
 GET /api/rollback/{owner}/{repo}/{pr_number}
 ```
@@ -310,14 +321,20 @@ GET /api/rollback/{owner}/{repo}/{pr_number}
 ```json
 {
   "found": true,
-  "snapshot_id": 1,
+  "id": 1,
   "repository": "owner/repo",
   "pr_number": 42,
-  "original_code": "function redirect(target) { ... }",
+  "file_path": "src/render.js",
+  "original_code": "",
   "reverse_patch": "--- modified.js\n+++ original.js\n@@ ...",
-  "created_at": "2026-10-31T20:45:00Z"
+  "baseline_available": false,
+  "captured_at": "2026-10-31T20:45:00Z",
+  "message": "No baseline source code was supplied; the reverse patch is available. Apply reverse_patch with `git apply` to rollback."
 }
 ```
+
+This endpoint returns a reverse patch; it does not apply the patch to a GitHub
+repository automatically.
 
 ---
 

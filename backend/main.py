@@ -21,6 +21,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional
+from urllib.parse import urlsplit
 
 import regression_engine
 import snapshot_vault
@@ -33,17 +34,18 @@ app = FastAPI(
     title="DiffShield Security Analysis API",
     description=(
         "Deterministic AST/block-level PR diff analyser that detects security-guard "
-        "regressions and provides instant rollback snapshots."
+        "regressions, generates reverse patches, and stores optional supplied baselines."
     ),
     version="1.0.0",
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origin_regex=r"^chrome-extension://[a-p]{32}$",
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
 )
 
 # Initialise the vault schema on startup
@@ -56,12 +58,56 @@ snapshot_vault.init_vault()
 
 
 class AnalyzePRRequest(BaseModel):
-    pr_url: Optional[str] = Field(default=None, description="GitHub PR URL to fetch diff from")
-    diff_text: Optional[str] = Field(default=None, description="Raw unified diff text")
+    pr_url: Optional[str] = Field(
+        default=None,
+        max_length=2048,
+        description="GitHub PR URL to fetch diff from",
+    )
+    diff_text: Optional[str] = Field(
+        default=None,
+        max_length=5_000_000,
+        description="Raw unified diff text",
+    )
     repository: Optional[str] = Field(default="unknown/repo", description="Repository (owner/name)")
     pr_number: Optional[int] = Field(default=0, description="Pull request number")
     file_path: Optional[str] = Field(default="unknown", description="File being analysed")
-    clean_code: Optional[str] = Field(default="", description="Pre-PR baseline code for snapshot")
+    clean_code: Optional[str] = Field(
+        default=None,
+        max_length=5_000_000,
+        description="Pre-PR baseline code for snapshot",
+    )
+
+
+def parse_github_pr_url(pr_url: str) -> tuple[str, str, int, str]:
+    """Validate a GitHub pull request URL and return its diff URL metadata."""
+
+    try:
+        parsed_url = urlsplit(pr_url)
+        port = parsed_url.port
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail="Invalid GitHub PR URL.") from error
+
+    match = re.fullmatch(
+        r"/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)/pull/([1-9][0-9]*)(?:/.*)?",
+        parsed_url.path,
+    )
+    if (
+        parsed_url.scheme != "https"
+        or parsed_url.hostname != "github.com"
+        or parsed_url.username is not None
+        or parsed_url.password is not None
+        or port not in (None, 443)
+        or match is None
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Provide a valid https://github.com/{owner}/{repo}/pull/{number} URL.",
+        )
+
+    owner, repo, pr_number_text = match.groups()
+    pr_number = int(pr_number_text)
+    diff_url = f"https://github.com/{owner}/{repo}/pull/{pr_number}.diff"
+    return owner, repo, pr_number, diff_url
 
 
 # ---------------------------------------------------------------------------
@@ -95,39 +141,47 @@ async def analyze_pr(request: AnalyzePRRequest):
     repository = request.repository or "unknown/repo"
     pr_number = request.pr_number or 0
 
-    # 1. Fetch diff from GitHub if a URL was provided
-    if request.pr_url:
-        match = re.search(r"github\.com/([^/]+)/([^/]+)/pull/(\d+)", request.pr_url)
-        if match:
-            owner, repo, pr_num_str = match.groups()
-            pr_number = int(pr_num_str)
-            repository = f"{owner}/{repo}"
-            diff_url = f"https://github.com/{owner}/{repo}/pull/{pr_number}.diff"
-        else:
-            diff_url = request.pr_url.split("?")[0].split("#")[0].rstrip("/") + ".diff"
+    if request.pr_url is not None and request.diff_text is not None:
+        raise HTTPException(
+            status_code=422,
+            detail="Provide either 'pr_url' or 'diff_text', not both.",
+        )
 
+    # 1. Fetch the diff only from a validated GitHub pull request URL.
+    if request.pr_url is not None:
+        owner, repo, pr_number, diff_url = parse_github_pr_url(request.pr_url)
+        repository = f"{owner}/{repo}"
         try:
             headers = {
                 "User-Agent": "DiffShield-AppSec/1.0",
                 "Accept": "text/plain",
             }
-            async with httpx.AsyncClient(follow_redirects=True, timeout=20, headers=headers) as client:
+            async with httpx.AsyncClient(
+                follow_redirects=False,
+                timeout=20,
+                headers=headers,
+            ) as client:
                 response = await client.get(diff_url)
                 response.raise_for_status()
                 raw_diff = response.text
+                if len(raw_diff) > 5_000_000:
+                    raise HTTPException(
+                        status_code=413,
+                        detail="The GitHub pull request diff exceeds the 5 MB analysis limit.",
+                    )
         except httpx.HTTPStatusError as exc:
             raise HTTPException(
                 status_code=502,
-                detail=f"GitHub returned HTTP {exc.response.status_code} for {diff_url}",
-            )
+                detail=f"GitHub returned HTTP {exc.response.status_code} for the pull request diff.",
+            ) from exc
         except httpx.RequestError as exc:
             raise HTTPException(
                 status_code=502,
-                detail=f"Could not reach GitHub: {exc}",
-            )
+                detail="Could not reach GitHub to fetch the pull request diff.",
+            ) from exc
 
     # 2. Fall back to inline diff_text
-    elif request.diff_text:
+    elif request.diff_text is not None:
         raw_diff = request.diff_text
 
     else:
@@ -154,6 +208,7 @@ async def analyze_pr(request: AnalyzePRRequest):
         file_path=file_path,
         original_code=clean_code,
         raw_diff=raw_diff,
+        baseline_available=request.clean_code is not None,
     )
 
     return {
@@ -162,6 +217,7 @@ async def analyze_pr(request: AnalyzePRRequest):
         "pr_number": pr_number,
         "file_path": file_path,
         "snapshot_id": snapshot_id,
+        "baseline_available": request.clean_code is not None,
         "diff_length": len(raw_diff),
     }
 

@@ -14,17 +14,36 @@
   // Guard: only run on GitHub PR pages
   // -------------------------------------------------------------------------
   const PR_PATTERN = /^https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+/;
-  if (!PR_PATTERN.test(window.location.href)) return;
+  const SENTINEL_ID = "diffshield-sentinel";
+  const BANNER_ID = "diffshield-quarantine-banner";
+
+  const listenerFlag = "__diffShieldNavigationListenersInstalled";
+  if (!window[listenerFlag]) {
+    window[listenerFlag] = true;
+    let navigationTimer;
+    const handleNavigation = () => {
+      window.clearTimeout(navigationTimer);
+      navigationTimer = window.setTimeout(() => {
+        document.getElementById(SENTINEL_ID)?.remove();
+        clearPageAlert();
+        diffShieldContentScript();
+      }, 100);
+    };
+
+    document.addEventListener("pjax:end", handleNavigation);
+    document.addEventListener("turbo:render", handleNavigation);
+  }
+
+  if (!PR_PATTERN.test(window.location.href)) {
+    clearPageAlert();
+    return;
+  }
 
   // Prevent double-injection on same-page navigations (pjax / turbo)
-  const SENTINEL_ID = "diffshield-sentinel";
   if (document.getElementById(SENTINEL_ID)) return;
   const sentinel = document.createElement("meta");
   sentinel.id = SENTINEL_ID;
   document.head.appendChild(sentinel);
-
-  const API_ENDPOINT = "http://127.0.0.1:8000/api/analyze-pr";
-  const BANNER_ID = "diffshield-quarantine-banner";
 
   // -------------------------------------------------------------------------
   // Remove any stale banner from a previous navigation
@@ -32,6 +51,46 @@
   function removeExistingBanner() {
     const existing = document.getElementById(BANNER_ID);
     if (existing) existing.remove();
+  }
+
+  function clearPageAlert() {
+    removeExistingBanner();
+    document.documentElement.style.scrollPaddingTop = "";
+  }
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, (character) => {
+      const entities = {
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      };
+      return entities[character];
+    });
+  }
+
+  function analyzeWithBackend(prUrl) {
+    return new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage(
+        { type: "DIFF_SHIELD_ANALYZE_PR", prUrl },
+        (response) => {
+          const runtimeError = chrome.runtime.lastError;
+          if (runtimeError) {
+            reject(new Error(runtimeError.message));
+            return;
+          }
+
+          if (!response?.ok) {
+            reject(new Error(response?.error || "Backend analysis failed."));
+            return;
+          }
+
+          resolve(response.result);
+        },
+      );
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -46,12 +105,7 @@
     banner.setAttribute("aria-live", "assertive");
 
     const severity = finding.severity || "HIGH";
-    const severityColors = {
-      CRITICAL: { bg: "#2d0a0a", border: "#ff2222", accent: "#ff4444" },
-      HIGH:     { bg: "#2d1a0a", border: "#ff6b00", accent: "#ff8c00" },
-      MEDIUM:   { bg: "#2d280a", border: "#ffc107", accent: "#ffdd55" },
-    };
-    const colors = severityColors[severity] || severityColors.HIGH;
+    const colors = { bg: "#2d0a0a", border: "#ff2222", accent: "#ff4444" };
 
     banner.style.cssText = `
       position: fixed;
@@ -89,7 +143,9 @@
       document.head.appendChild(style);
     }
 
-    const cveRef = finding.cve_cwe ? `&nbsp;·&nbsp;<code style="background:rgba(255,255,255,0.1);padding:1px 5px;border-radius:3px;font-size:11px;">${finding.cve_cwe}</code>` : "";
+    const cveRef = finding.cve_cwe
+      ? `&nbsp;·&nbsp;<code style="background:rgba(255,255,255,0.1);padding:1px 5px;border-radius:3px;font-size:11px;">${escapeHtml(finding.cve_cwe)}</code>`
+      : "";
 
     banner.innerHTML = `
       <div style="max-width:1280px;margin:0 auto;display:flex;align-items:flex-start;gap:14px;padding:14px 20px;">
@@ -106,25 +162,25 @@
         <div style="flex:1;min-width:0;">
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px;">
             <span style="font-weight:700;font-size:13px;letter-spacing:0.05em;color:${colors.accent};text-transform:uppercase;">
-              ⛔ DiffShield: ${holdHours}h Quarantine Hold
+              ⛔ DiffShield: ${escapeHtml(holdHours)}h Quarantine Hold
             </span>
             <span style="background:${colors.border};color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;text-transform:uppercase;letter-spacing:0.08em;">
-              ${severity} RISK · Score ${riskScore}/100
+              ${escapeHtml(severity)} RISK · Score ${escapeHtml(riskScore)}/100
             </span>
             ${cveRef}
           </div>
 
           <div style="font-weight:600;font-size:13px;color:#f0f0f0;margin-bottom:3px;">
-            ${finding.title || "Security Guard Regression Detected"}
+            ${escapeHtml(finding.title || "Security Guard Regression Detected")}
           </div>
 
           <div style="color:#c0c0c0;font-size:12px;line-height:1.5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:900px;">
-            ${finding.description || "A critical security boundary has been removed in this pull request."}
+            ${escapeHtml(finding.description || "A critical security boundary has been removed in this pull request.")}
           </div>
 
           <div style="margin-top:6px;font-size:11px;color:#888;">
-            Finding ID: <code style="background:rgba(255,255,255,0.08);padding:1px 5px;border-radius:3px;">${finding.id || "DS-UNKNOWN"}</code>
-            &nbsp;·&nbsp; Repository: <strong style="color:#aaa;">${finding.repository || ""}</strong>
+            Finding ID: <code style="background:rgba(255,255,255,0.08);padding:1px 5px;border-radius:3px;">${escapeHtml(finding.id || "DS-UNKNOWN")}</code>
+            &nbsp;·&nbsp; Repository: <strong style="color:#aaa;">${escapeHtml(finding.repository || "")}</strong>
             &nbsp;·&nbsp; Detected by <strong style="color:${colors.accent};">DiffShield</strong>
           </div>
         </div>
@@ -174,55 +230,35 @@
   // -------------------------------------------------------------------------
   async function runAnalysis() {
     const prUrl = window.location.href;
+    const scanPath = new URL(prUrl).pathname.match(
+      /^\/[^/]+\/[^/]+\/pull\/\d+/,
+    )?.[0];
 
     let data;
     try {
-      const response = await fetch(API_ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pr_url: prUrl }),
-      });
-
-      if (!response.ok) {
-        console.warn("[DiffShield] API returned", response.status, "– skipping.");
-        return;
-      }
-
-      data = await response.json();
+      data = await analyzeWithBackend(prUrl);
     } catch (err) {
-      // Backend not running or network error – fail silently
-      console.info("[DiffShield] Backend unreachable. Start with: uvicorn main:app --reload");
+      console.warn(
+        "[DiffShield] Could not analyze this pull request:",
+        err instanceof Error ? err.message : err,
+      );
       return;
     }
+
+    const currentPath = new URL(window.location.href).pathname.match(
+      /^\/[^/]+\/[^/]+\/pull\/\d+/,
+    )?.[0];
+    if (!scanPath || currentPath !== scanPath) return;
 
     console.info("[DiffShield] Analysis result:", data.status, "| risk:", data.risk_score);
 
     if (data.status === "QUARANTINE_HOLD" && data.finding) {
-      // Notify background service worker → updates chrome.storage.local
-      try {
-        chrome.runtime.sendMessage({
-          type: "DIFF_SHIELD_MALICIOUS_CHANGE",
-          finding: data.finding,
-        });
-      } catch (msgErr) {
-        console.warn("[DiffShield] Could not message background:", msgErr);
-      }
-
       // Inject the in-page banner
       injectQuarantineBanner(data.finding, data.risk_score, data.hold_hours);
+    } else {
+      removeExistingBanner();
     }
   }
 
-  // Run immediately then also listen for GitHub's pjax/turbo navigations
   runAnalysis();
-
-  // Re-run on GitHub's internal navigation events (pjax and turbo)
-  document.addEventListener("pjax:end", () => {
-    document.getElementById(SENTINEL_ID)?.remove();
-    diffShieldContentScript();
-  });
-  document.addEventListener("turbo:render", () => {
-    document.getElementById(SENTINEL_ID)?.remove();
-    diffShieldContentScript();
-  });
 })();

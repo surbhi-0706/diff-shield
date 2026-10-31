@@ -10,6 +10,7 @@ import {
   GitBranch,
   GitPullRequest,
   Package,
+  RefreshCw,
   Search,
   Settings,
   Shield,
@@ -20,31 +21,13 @@ import {
 
 import {
   dismissLatestThreat,
+  checkBackendHealth,
+  subscribeToLatestScan,
   subscribeToLatestThreat,
+  type LatestScan,
   type ThreatFinding,
 } from "./services/threatFindings";
 import "./App.css";
-
-const alerts = [
-  {
-    id: "DS-001",
-    severity: "HIGH",
-    title: "Possible vulnerability reintroduction",
-    description:
-      "A previously patched security pattern may have returned in a dependency update.",
-    repository: "example/package",
-    time: "Demo finding",
-  },
-  {
-    id: "DS-002",
-    severity: "MEDIUM",
-    title: "Suspicious dependency modification",
-    description:
-      "A dependency version changed and requires additional security review.",
-    repository: "example/api-client",
-    time: "Demo finding",
-  },
-] as const;
 
 const features = [
   {
@@ -54,11 +37,11 @@ const features = [
     description: "Compare changes against historical fixes.",
     heading: "Patch comparison",
     summary:
-      "Diff Shield is designed to compare incoming code changes with historical vulnerability fixes.",
+      "The local backend analyzes GitHub pull request diffs for removed security guards and known vulnerability patterns.",
     steps: [
-      "Identify security fixes in project history.",
-      "Compare incoming changes with the original patch.",
-      "Highlight code that may reintroduce a known vulnerability.",
+      "Open a GitHub pull request while the backend is running.",
+      "The backend fetches and parses the pull request diff.",
+      "Review any removed security guard reported by the analysis.",
     ],
   },
   {
@@ -68,11 +51,11 @@ const features = [
     description: "Inspect suspicious repository changes.",
     heading: "Pull request analysis",
     summary:
-      "Pull request monitoring is not connected yet. Findings on the overview are illustrative demo data.",
+      "When you open a GitHub pull request, the extension sends its URL to your local DiffShield backend for analysis.",
     steps: [
-      "Connect a repository monitoring integration.",
-      "Review changed dependencies and security-sensitive code.",
-      "Inspect flagged changes before merging.",
+      "Open a GitHub pull request while the backend is running.",
+      "The backend fetches and analyzes the pull request diff.",
+      "Review any security regression finding on GitHub and in this popup.",
     ],
   },
   {
@@ -82,11 +65,11 @@ const features = [
     description: "Bring important findings to your attention.",
     heading: "Security notifications",
     summary:
-      "Notification delivery is not connected yet. This popup currently shows demo findings only.",
+      "Security findings returned by the backend are stored locally and shown in the popup and on the pull request page.",
     steps: [
-      "Choose the finding severities shown on the overview.",
-      "Connect monitoring to receive live security findings.",
-      "Review each finding in its repository before taking action.",
+      "The extension saves the latest pull request scan result.",
+      "Detected regressions appear as a red alert banner.",
+      "Dismiss the alert after reviewing the finding.",
     ],
   },
 ] as const;
@@ -98,19 +81,53 @@ type Severity = "HIGH" | "MEDIUM";
 function App() {
   const [page, setPage] = useState<Page>("overview");
   const [latestThreat, setLatestThreat] = useState<ThreatFinding | null>(null);
+  const [latestScan, setLatestScan] = useState<LatestScan | null>(null);
+  const [backendState, setBackendState] = useState<
+    "checking" | "connected" | "offline"
+  >("checking");
+  const [backendError, setBackendError] = useState<string | null>(null);
   const [visibleSeverities, setVisibleSeverities] = useState<
     Record<Severity, boolean>
   >({ HIGH: true, MEDIUM: true });
 
-  useEffect(
-    () => subscribeToLatestThreat(setLatestThreat),
-    [],
-  );
+  useEffect(() => {
+    let active = true;
+    const unsubscribeThreat = subscribeToLatestThreat(setLatestThreat);
+    const unsubscribeScan = subscribeToLatestScan(setLatestScan);
 
-  const visibleAlerts = alerts.filter(
-    (alert) => visibleSeverities[alert.severity],
-  );
+    void checkBackendHealth().then((result) => {
+      if (!active) return;
+      setBackendState(result.connected ? "connected" : "offline");
+      setBackendError(result.error ?? null);
+    });
+
+    return () => {
+      active = false;
+      unsubscribeThreat();
+      unsubscribeScan();
+    };
+  }, []);
+
+  const threatSeverity = latestThreat?.severity.toUpperCase();
+  const threatFilter: Severity | null = threatSeverity
+    ? threatSeverity === "CRITICAL" || threatSeverity === "HIGH"
+      ? "HIGH"
+      : "MEDIUM"
+    : null;
+  const visibleThreat =
+    latestThreat && threatFilter && visibleSeverities[threatFilter]
+      ? latestThreat
+      : null;
   const activeFeature = features.find((feature) => feature.id === page);
+
+  function refreshBackendStatus() {
+    setBackendState("checking");
+    setBackendError(null);
+    void checkBackendHealth().then((result) => {
+      setBackendState(result.connected ? "connected" : "offline");
+      setBackendError(result.error ?? null);
+    });
+  }
 
   function toggleSeverity(severity: Severity) {
     setVisibleSeverities((current) => ({
@@ -191,37 +208,73 @@ function App() {
             </p>
           </section>
 
-          <section className="status-card">
+          <section className={`status-card backend-card ${backendState}`}>
             <div className="status-icon">
-              <ShieldCheck size={26} />
+              {backendState === "offline" ? (
+                <ShieldAlert size={26} />
+              ) : (
+                <ShieldCheck size={26} />
+              )}
             </div>
 
             <div className="status-content">
-              <span>PROTECTION STATUS</span>
-              <h3>Alert receiver ready</h3>
-              <p>Connect a scanner for live detection</p>
+              <span>DIFFSHIELD BACKEND</span>
+              <h3>
+                {backendState === "checking"
+                  ? "Checking connection…"
+                  : backendState === "connected"
+                    ? "Backend connected"
+                    : "Backend offline"}
+              </h3>
+              <p>
+                {backendState === "offline"
+                  ? backendError || "Start the backend at 127.0.0.1:8000"
+                  : latestScan?.status === "ERROR"
+                    ? `Last scan failed: ${latestScan.error ?? "Unknown backend error."}`
+                    : latestScan
+                      ? `Last scan: ${latestScan.repository ?? "GitHub PR"} · ${latestScan.status}`
+                      : backendState === "connected"
+                        ? "Open a GitHub pull request to scan it"
+                        : "Checking backend connection"}
+              </p>
             </div>
 
-            <span className="status-badge">SETUP</span>
+            <span className={`status-badge ${backendState}`}>
+              {backendState === "checking"
+                ? "CHECKING"
+                : backendState === "connected"
+                  ? "ONLINE"
+                  : "OFFLINE"}
+            </span>
+            <button
+              className="backend-refresh"
+              type="button"
+              aria-label="Check backend connection"
+              title="Check backend connection"
+              onClick={refreshBackendStatus}
+              disabled={backendState === "checking"}
+            >
+              <RefreshCw size={15} />
+            </button>
           </section>
 
           <section className="stats">
             <div className="stat-card">
               <GitPullRequest size={19} />
-              <h2>12</h2>
-              <p>Sample PRs</p>
+              <h2>{latestScan ? "1" : "—"}</h2>
+              <p>Latest PR scan</p>
             </div>
 
             <div className="stat-card">
               <ShieldAlert size={19} />
-              <h2>02</h2>
-              <p>Sample alerts</p>
+              <h2>{latestThreat ? "1" : "0"}</h2>
+              <p>Open findings</p>
             </div>
 
             <div className="stat-card">
               <Package size={19} />
-              <h2>08</h2>
-              <p>Dependencies</p>
+              <h2>{backendState === "connected" ? "ON" : "OFF"}</h2>
+              <p>Backend</p>
             </div>
           </section>
 
@@ -229,45 +282,51 @@ function App() {
             <div className="section-heading">
               <div>
                 <h3>Security findings</h3>
-                <p>Illustrative security alerts</p>
+                <p>Latest finding from your PR scans</p>
               </div>
 
-              <span className="alert-count">
-                {String(visibleAlerts.length).padStart(2, "0")}
-              </span>
+              <span className="alert-count">{visibleThreat ? "01" : "00"}</span>
             </div>
 
-            {visibleAlerts.length > 0 ? (
+            {visibleThreat ? (
               <div className="alert-list">
-                {visibleAlerts.map((alert) => (
-                  <article className="alert-card" key={alert.id}>
+                  <article className="alert-card" key={visibleThreat.id}>
                     <div className="alert-top">
-                      <span className={`severity ${alert.severity.toLowerCase()}`}>
-                        {alert.severity} RISK
+                      <span
+                        className={`severity ${visibleThreat.severity.toLowerCase()}`}
+                      >
+                        {visibleThreat.severity} RISK
                       </span>
 
                       <span className="alert-time">
                         <Clock3 size={11} />
-                        {alert.time}
+                        {new Date(visibleThreat.detectedAt).toLocaleString()}
                       </span>
                     </div>
 
-                    <h4>{alert.title}</h4>
+                    <h4>{visibleThreat.title}</h4>
 
-                    <p>{alert.description}</p>
+                    <p>{visibleThreat.description}</p>
 
                     <div className="repository">
                       <GitBranch size={14} />
-                      {alert.repository}
+                      {visibleThreat.repository}
                     </div>
 
-                    <div className="finding-id">FINDING ID: {alert.id}</div>
+                    <div className="finding-id">
+                      FINDING ID: {visibleThreat.id}
+                    </div>
                   </article>
-                ))}
               </div>
             ) : (
               <p className="empty-state">
-                No findings match your filters. Update them in settings.
+                {latestScan?.status === "ERROR"
+                  ? `The latest scan failed: ${latestScan.error ?? "Unknown backend error."}`
+                  : latestScan?.status === "PASSED"
+                    ? "No security guard regressions found in the latest scan."
+                    : latestThreat
+                      ? "This finding is hidden by your current severity filters."
+                      : "No backend finding yet. Open a GitHub pull request while the backend is running."}
               </p>
             )}
           </section>
@@ -326,7 +385,7 @@ function App() {
               <div className="detail-card">
                 <h3>Finding filters</h3>
                 <p>
-                  Choose which demo findings appear on the security overview.
+                  Choose which finding severities appear on the security overview.
                 </p>
 
                 {(["HIGH", "MEDIUM"] as const).map((severity) => (
@@ -377,8 +436,8 @@ function App() {
                 <ShieldAlert size={15} />
                 <span>
                   {page === "patch-comparison"
-                    ? "Analysis is not connected. The findings shown are examples."
-                    : "Live monitoring is not connected in this demo."}
+                    ? "The backend scans GitHub pull request diffs using its regression engine."
+                    : "The backend must be running locally to analyze pull requests."}
                 </span>
               </div>
 

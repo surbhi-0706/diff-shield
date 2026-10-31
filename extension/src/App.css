@@ -455,6 +455,61 @@ input:focus-visible,
   border: 1px solid rgba(16, 185, 129, 0.25);
 }
 
+.backend-card.offline {
+  border-color: rgba(248, 113, 113, 0.3);
+  background: linear-gradient(
+    135deg,
+    rgba(248, 113, 113, 0.08),
+    var(--ds-surface) 55%
+  );
+}
+
+.backend-card.offline .status-icon {
+  color: var(--ds-danger);
+  background: var(--ds-danger-soft);
+}
+
+.status-badge.offline {
+  color: var(--ds-danger);
+  background: var(--ds-danger-soft);
+  border-color: rgba(248, 113, 113, 0.25);
+}
+
+.status-badge.checking {
+  color: var(--ds-warning);
+  background: var(--ds-warning-soft);
+  border-color: rgba(251, 191, 36, 0.25);
+}
+
+.backend-refresh {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  color: var(--ds-muted);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-sm);
+  transition:
+    color var(--ds-fast) ease,
+    border-color var(--ds-fast) ease,
+    transform var(--ds-normal) ease;
+}
+
+.backend-refresh:hover:not(:disabled) {
+  color: var(--ds-primary);
+  border-color: var(--ds-border-accent);
+}
+
+.backend-refresh:active:not(:disabled) {
+  transform: rotate(45deg);
+}
+
+.backend-refresh:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
 /* ---------- Stats ---------- */
 
 .stats {
@@ -587,6 +642,10 @@ input:focus-visible,
   background: var(--ds-danger);
 }
 
+.alert-card:has(.severity.critical)::before {
+  background: #e11d48;
+}
+
 .alert-card:has(.severity.medium)::before {
   background: var(--ds-warning);
 }
@@ -616,6 +675,11 @@ input:focus-visible,
 .severity.high {
   color: var(--ds-danger);
   background: var(--ds-danger-soft);
+}
+
+.severity.critical {
+  color: #fff1f2;
+  background: #7f1d1d;
 }
 
 .severity.medium {

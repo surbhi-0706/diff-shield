@@ -7,7 +7,6 @@ Full CVE/CWE signature coverage for:
 
 from __future__ import annotations
 
-import random
 import uuid
 
 from block_parser import parse_diff_blocks, detect_language
@@ -250,8 +249,12 @@ _VULN_SIGNATURES: dict = {
 
 _SEVERITY_ORDER: dict = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
 
-_RISK_SCORE_MIN = 88
-_RISK_SCORE_MAX = 94
+_RISK_SCORE_BY_SEVERITY = {
+    "CRITICAL": 94,
+    "HIGH": 92,
+    "MEDIUM": 90,
+    "LOW": 88,
+}
 _RISK_SCORE_CLEAN = 8
 _HOLD_HOURS = 12
 
@@ -398,7 +401,7 @@ def analyze_diff(
     all_categories_str = ", ".join(d["category"] for d in dropped)
     target_file = primary.get("file_path", file_path)
 
-    risk_score = random.randint(_RISK_SCORE_MIN, _RISK_SCORE_MAX)
+    risk_score = _RISK_SCORE_BY_SEVERITY[primary["severity"]]
     finding_id = f"DS-{uuid.uuid4().hex[:8].upper()}"
 
     finding = {

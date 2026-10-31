@@ -1,8 +1,8 @@
 ﻿"""
 snapshot_vault.py - Defense-in-depth code snapshot vault for DiffShield.
 
-Stores pre-PR baselines and reverse patches in a local SQLite database
-(diffshield_vault.db) to enable 1-click git rollbacks.
+Stores optional pre-PR baselines and reverse patches in a local SQLite database
+(diffshield_vault.db) to support reverse-patch recovery.
 """
 
 from __future__ import annotations
@@ -36,10 +36,23 @@ def init_vault() -> None:
                 original_code TEXT    NOT NULL,
                 raw_diff      TEXT    NOT NULL,
                 reverse_patch TEXT    NOT NULL,
+                baseline_available INTEGER NOT NULL DEFAULT 0,
                 captured_at   TEXT    NOT NULL
             )
             """
         )
+        columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(code_snapshots)")
+        }
+        if "baseline_available" not in columns:
+            conn.execute(
+                "ALTER TABLE code_snapshots "
+                "ADD COLUMN baseline_available INTEGER NOT NULL DEFAULT 0"
+            )
+            conn.execute(
+                "UPDATE code_snapshots SET baseline_available = 1 "
+                "WHERE original_code != ''"
+            )
         conn.commit()
 
 
@@ -76,12 +89,15 @@ def archive_snapshot(
     file_path: str,
     original_code: str,
     raw_diff: str,
+    baseline_available: bool | None = None,
 ) -> int:
-    """Save a pre-PR baseline and its reverse patch to the vault.
+    """Save a reverse patch and any supplied pre-PR baseline to the vault.
 
     Returns the row id of the newly inserted snapshot.
     """
     init_vault()
+    if baseline_available is None:
+        baseline_available = bool(original_code)
     reverse_patch = generate_reverse_patch(raw_diff)
     captured_at = datetime.now(timezone.utc).isoformat()
 
@@ -90,8 +106,8 @@ def archive_snapshot(
             """
             INSERT INTO code_snapshots
                 (repository, pr_number, file_path, original_code,
-                 raw_diff, reverse_patch, captured_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+                 raw_diff, reverse_patch, baseline_available, captured_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 repository,
@@ -100,6 +116,7 @@ def archive_snapshot(
                 original_code,
                 raw_diff,
                 reverse_patch,
+                int(baseline_available),
                 captured_at,
             ),
         )
@@ -119,6 +136,7 @@ def retrieve_rollback(repository: str, pr_number: int) -> dict:
         original_code : str | None
         raw_diff      : str | None
         reverse_patch : str | None
+        baseline_available : bool
         captured_at   : str | None
         message       : str
     """
@@ -147,9 +165,18 @@ def retrieve_rollback(repository: str, pr_number: int) -> dict:
             "original_code": None,
             "raw_diff": None,
             "reverse_patch": None,
+            "baseline_available": False,
             "captured_at": None,
             "message": f"No snapshot found for {repository} PR#{pr_number}.",
         }
+
+    baseline_available = bool(row["baseline_available"])
+    message = (
+        "Baseline code and reverse patch retrieved. Apply reverse_patch with `git apply` to rollback."
+        if baseline_available
+        else "No baseline source code was supplied; the reverse patch is available. "
+        "Apply reverse_patch with `git apply` to rollback."
+    )
 
     return {
         "found": True,
@@ -160,6 +187,7 @@ def retrieve_rollback(repository: str, pr_number: int) -> dict:
         "original_code": row["original_code"],
         "raw_diff": row["raw_diff"],
         "reverse_patch": row["reverse_patch"],
+        "baseline_available": baseline_available,
         "captured_at": row["captured_at"],
-        "message": "Snapshot retrieved successfully. Apply reverse_patch with `git apply` to rollback.",
+        "message": message,
     }

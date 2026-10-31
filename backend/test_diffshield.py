@@ -265,6 +265,7 @@ check("archived (id > 0)", isinstance(sid, int) and sid > 0, str(sid))
 rb = snapshot_vault.retrieve_rollback("test/c", 18)
 check("rollback.found", rb["found"] is True)
 check("reverse_patch present", bool(rb.get("reverse_patch")))
+check("baseline is marked available", rb["baseline_available"] is True)
 check("DB file exists", (Path(__file__).parent / "diffshield_vault.db").exists())
 
 # ─────────────────────────────────────────────────────────────
