@@ -2,8 +2,13 @@
 """
 DIFF SHIELD - Git Diff Analyzer
 
-Extracts added and deleted source lines from a unified Git diff.
-This is an initial parser, not a complete Git patch implementation.
+Extracts added and deleted lines from unified Git diffs.
+Normalizes harmless whitespace before matching known patterns.
+
+Limitations:
+- Matching is line-based.
+- This is not a language-aware parser.
+- It does not prove that code is safe or exploitable.
 """
 
 from dataclasses import dataclass, field
@@ -24,8 +29,93 @@ class DiffAnalysis:
     explanation: str
 
 
+def normalize_code_line(line: str) -> str:
+    """
+    Normalize harmless whitespace outside quoted strings.
+
+    Preserves spaces inside:
+    - Single-quoted strings
+    - Double-quoted strings
+    - Backtick-quoted strings
+
+    Normalizes spacing around parentheses, brackets,
+    braces and commas.
+    """
+
+    result = []
+    quote = None
+    escaped = False
+    pending_space = False
+
+    opening = "([{"
+    closing = ")]}"
+
+    for char in line.strip():
+
+        # Preserve string contents exactly.
+        if quote is not None:
+            result.append(char)
+
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+
+            continue
+
+        # Start of a quoted string.
+        if char in ("'", '"', "`"):
+
+            if pending_space and result:
+                if result[-1] not in opening and result[-1] != ",":
+                    result.append(" ")
+
+            result.append(char)
+            quote = char
+            pending_space = False
+            continue
+
+        # Whitespace outside strings.
+        if char.isspace():
+            pending_space = True
+            continue
+
+        # Normalize spacing before closing punctuation.
+        if char in closing or char == ",":
+            if result and result[-1] == " ":
+                result.pop()
+
+            result.append(char)
+            pending_space = False
+            continue
+
+        # Normalize spacing after opening punctuation.
+        if char in opening:
+            if pending_space and result and result[-1] == " ":
+                result.pop()
+
+            result.append(char)
+            pending_space = False
+            continue
+
+        # Keep one space between ordinary tokens.
+        if pending_space and result:
+            result.append(" ")
+
+        result.append(char)
+        pending_space = False
+
+    return "".join(result).strip()
+
+
 def parse_unified_diff(diff_text: str) -> list[FileDiff]:
-    """Extract added and deleted lines, grouped by file."""
+    """
+    Extract added and deleted lines from a unified Git diff.
+
+    Groups changes by filename and ignores diff metadata.
+    """
 
     files = []
     current_file = None
@@ -40,6 +130,7 @@ def parse_unified_diff(diff_text: str) -> list[FileDiff]:
             filename = line[4:].strip()
 
             if filename == "/dev/null":
+                current_file = None
                 continue
 
             if filename.startswith("b/"):
@@ -70,35 +161,45 @@ def analyze_diff(
     security_patterns: list[str],
 ) -> DiffAnalysis:
     """
-    Look for known vulnerable patterns being added and known
-    security protections being deleted.
+    Detect known vulnerable additions and removed security patterns.
 
-    Exact normalized line matching only.
+    Matching uses normalized individual lines.
     """
 
     files = parse_unified_diff(diff_text)
 
     added = {
-        line.strip()
+        normalize_code_line(line)
         for file in files
         for line in file.added_lines
-        if line.strip()
+        if normalize_code_line(line)
     }
 
     deleted = {
-        line.strip()
+        normalize_code_line(line)
         for file in files
         for line in file.deleted_lines
-        if line.strip()
+        if normalize_code_line(line)
     }
 
-    vulnerable = {line.strip() for line in vulnerable_patterns}
-    protections = {line.strip() for line in security_patterns}
+    vulnerable = {
+        normalize_code_line(line)
+        for line in vulnerable_patterns
+        if normalize_code_line(line)
+    }
+
+    protections = {
+        normalize_code_line(line)
+        for line in security_patterns
+        if normalize_code_line(line)
+    }
 
     added_vulnerable = sorted(added & vulnerable)
     removed_security = sorted(deleted & protections)
 
-    suspicious = bool(added_vulnerable and removed_security)
+    suspicious = bool(
+        added_vulnerable and removed_security
+    )
 
     if suspicious:
         explanation = (
@@ -109,7 +210,7 @@ def analyze_diff(
         explanation = (
             "The diff did not contain both a known vulnerable "
             "addition and a known security-protection deletion. "
-            "This does not prove the change is safe."
+            "This does not prove that the change is safe."
         )
 
     return DiffAnalysis(
