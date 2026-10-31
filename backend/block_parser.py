@@ -219,7 +219,8 @@ _SENSITIVE_PATTERNS: dict[str, list[str]] = {
     ],
     "REFLECTION_JAVA": [
         "Class.forName(", ".getDeclaredMethod(", ".getMethod(",
-        ".invoke(", ".newInstance(", "MethodHandles.lookup(",
+        ".invoke(", ".getDeclaredConstructor().newInstance(",
+        "clazz.newInstance(", "MethodHandles.lookup(",
     ],
     "SSRF_JAVA": [
         "new URL(", "HttpURLConnection", "URLConnection",
@@ -271,9 +272,11 @@ _SENSITIVE_PATTERNS: dict[str, list[str]] = {
     "WEAK_CRYPTO": [
         "md5(", "MD5(", "MessageDigest.getInstance(\"MD5\")",
         "sha1(", "SHA1(", "MessageDigest.getInstance(\"SHA-1\")",
-        "DES", "RC4", "ECB", "createCipheriv(\"des",
-        "createCipheriv(\"rc4", "hashlib.md5(",
-        "hashlib.sha1(", "CryptoJS.MD5(",
+        "\"DES\"", "'DES'", "\"des\"", "'des'", "DES/", "/DES", "Cipher.DES",
+        "\"RC4\"", "'RC4'", "\"rc4\"", "'rc4'", "RC4/", "ARC4",
+        "\"ECB\"", "'ECB'", "/ECB",
+        "createCipheriv(\"des", "createCipheriv(\"rc4",
+        "hashlib.md5(", "hashlib.sha1(", "CryptoJS.MD5(",
     ],
 
     # ── HTML ───────────────────────────────────────────────────────────────

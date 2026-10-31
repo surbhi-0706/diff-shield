@@ -268,6 +268,64 @@ check("reverse_patch present", bool(rb.get("reverse_patch")))
 check("DB file exists", (Path(__file__).parent / "diffshield_vault.db").exists())
 
 # ─────────────────────────────────────────────────────────────
+# Multi-line guards & Multi-file PRs
+# ─────────────────────────────────────────────────────────────
+section("Multi-line Guard — Java OS Command Injection")
+diff_java = """--- a/src/Exec.java
++++ b/src/Exec.java
+@@ -10,4 +10,2 @@
+-    if (!isValid(cmd)) {
+-        return null;
+-    }
+     Runtime.getRuntime().exec(cmd);"""
+r = regression_engine.analyze_diff(diff_java, repository="test/multiline", pr_number=28, file_path="src/Exec.java")
+check("QUARANTINE_HOLD", qh(r), r["status"])
+check("CWE-78", r["finding"]["cve_cwe"] == "CWE-78", str(r["finding"]["cve_cwe"]))
+check("Language: Java", r["finding"]["language"] == "Java", r["finding"]["language"])
+
+section("Multi-line Guard — Python Command Injection")
+diff_py = """--- a/backend/runner.py
++++ b/backend/runner.py
+@@ -5,3 +5,2 @@
+-    if not is_safe(cmd):
+-        raise ValueError("forbidden")
+     os.system(cmd)"""
+r = regression_engine.analyze_diff(diff_py, repository="test/multiline", pr_number=29, file_path="backend/runner.py")
+check("QUARANTINE_HOLD", qh(r), r["status"])
+check("CWE-78", r["finding"]["cve_cwe"] == "CWE-78", str(r["finding"]["cve_cwe"]))
+
+section("Multi-File PR — Git Unified Diff (Python + Java)")
+diff_multi = """diff --git a/src/clean.py b/src/clean.py
+index 111..222 100644
+--- a/src/clean.py
++++ b/src/clean.py
+@@ -1,2 +1,2 @@
+-print("hello")
++print("world")
+diff --git a/services/Exec.java b/services/Exec.java
+index 333..444 100644
+--- a/services/Exec.java
++++ b/services/Exec.java
+@@ -10,3 +10,2 @@
+-    if (checkPermission(user)) Runtime.getRuntime().exec(cmd);
+     Runtime.getRuntime().exec(cmd);
+"""
+r = regression_engine.analyze_diff(diff_multi, repository="test/pr", pr_number=30)
+check("QUARANTINE_HOLD", qh(r), r["status"])
+check("Exact file: services/Exec.java", r["finding"]["file_path"] == "services/Exec.java", r["finding"]["file_path"])
+check("Language: Java", r["finding"]["language"] == "Java", r["finding"]["language"])
+
+section("Guard Replaced — Clean PR PASSED")
+diff_replaced = """--- a/ui.js
++++ b/ui.js
+@@ -10,3 +10,3 @@
+-  if (key === '__proto__') return;
++  if (['__proto__', 'constructor'].includes(key)) return;
+   obj[key] = val;"""
+r = regression_engine.analyze_diff(diff_replaced, repository="test/clean", pr_number=31, file_path="ui.js")
+check("PASSED", r["status"] == "PASSED", r["status"])
+
+# ─────────────────────────────────────────────────────────────
 # Summary
 # ─────────────────────────────────────────────────────────────
 print(f"\n{'='*56}")
