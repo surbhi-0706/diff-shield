@@ -278,11 +278,13 @@ Require pull requests before merging so changes cannot bypass the check by
 being pushed directly to `main`.
 
 The workflow uses `pull_request_target` so its scanner comes from trusted base
-code. It only retrieves the PR diff, does not check out or execute contributor
-code, and gives its scan step a token limited to reading pull requests and
-writing checks. A detected regression fails the required status check. This
-mode does not run the backend service or provide its persistent 12-hour
-quarantine/reviewer workflow.
+code. On pull-request open, reopen, synchronization, and ready-for-review
+events, it only retrieves the PR diff, does not check out or execute
+contributor code, and gives its scan step a token limited to reading pull
+requests and writing checks. A detected regression fails the required
+`DiffShield Security Gate` check on the PR head commit. This mode does not run
+the backend service or provide its persistent 12-hour quarantine/reviewer
+workflow.
 
 ## Optional GitHub App Backend Integration
 
