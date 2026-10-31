@@ -39,6 +39,14 @@ class AnalyzePRApiTests(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(main.app)
 
+    def test_api_root_lists_available_routes(self):
+        response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "ok")
+        self.assertEqual(response.json()["health"], "/health")
+        self.assertEqual(response.json()["analyze_pr"], "/api/analyze-pr")
+
     def test_only_accepts_canonical_github_pull_request_urls(self):
         owner, repo, number, diff_url = main.parse_github_pr_url(
             "https://github.com/example/project/pull/42/files?tab=files"

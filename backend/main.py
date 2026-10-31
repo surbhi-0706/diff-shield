@@ -115,6 +115,19 @@ def parse_github_pr_url(pr_url: str) -> tuple[str, str, int, str]:
 # ---------------------------------------------------------------------------
 
 
+@app.get("/", summary="API entrypoint")
+async def root():
+    """Provide route discovery when the backend base URL is opened."""
+    return {
+        "service": "DiffShield Security Analysis API",
+        "status": "ok",
+        "health": "/health",
+        "analyze_pr": "/api/analyze-pr",
+        "rollback": "/api/rollback/{owner}/{repo}/{pr_number}",
+        "docs": "/docs",
+    }
+
+
 @app.get("/health", summary="Service health check")
 async def health():
     """Return service status and confirm all engines are ready."""
