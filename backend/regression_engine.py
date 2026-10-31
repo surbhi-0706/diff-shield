@@ -1,4 +1,4 @@
-﻿"""
+"""
 regression_engine.py - Guard regression detector for DiffShield.
 
 Full CVE/CWE signature coverage for:
@@ -10,7 +10,7 @@ from __future__ import annotations
 import random
 import uuid
 
-from block_parser import parse_diff_blocks
+from block_parser import parse_diff_blocks, detect_language
 
 # ---------------------------------------------------------------------------
 # Vulnerability signature map  (category → CVE/CWE, severity, title)
@@ -300,24 +300,81 @@ def analyze_diff(
         finding            : dict | None
         all_dropped        : list[dict]   full detail of every dropped category
     """
-    blocks = parse_diff_blocks(raw_diff)
+    blocks = parse_diff_blocks(raw_diff, fallback_file_path=file_path)
+
+    dropped: list = []
+    seen_categories: set = set()
+
+    # 1. Hunk-level and file-aware analysis
+    for file_entry in blocks.get("files", []):
+        f_path = file_entry.get("file_path") or file_path
+        f_lang = file_entry.get("language") or detect_language(f_path)
+
+        for hunk in file_entry.get("hunks", []):
+            rem_guards = [b for b in hunk["removed_blocks"] if b["kind"] == "GUARD_CONDITION"]
+            add_guards = [b for b in hunk["added_blocks"] if b["kind"] == "GUARD_CONDITION"]
+
+            candidate_cats = set()
+            for g in rem_guards:
+                for c in g.get("categories", []):
+                    candidate_cats.add(c)
+                for s in g.get("sinks", []):
+                    candidate_cats.add(s)
+
+            # If a guard was removed from this hunk, check if any sensitive sinks in the hunk are left exposed
+            if rem_guards:
+                for s in hunk.get("hunk_sinks", set()):
+                    candidate_cats.add(s)
+
+            added_cats = set()
+            for g in add_guards:
+                for c in g.get("categories", []):
+                    added_cats.add(c)
+                for s in g.get("sinks", []):
+                    added_cats.add(s)
+
+            for cat in candidate_cats:
+                # If an added guard covers this category, it is replaced
+                if cat in added_cats:
+                    continue
+                # If guard replaced with equal or greater guards and sink was not inline
+                if len(add_guards) >= len(rem_guards) and not any(cat in g.get("categories", []) for g in rem_guards):
+                    continue
+
+                if cat not in seen_categories:
+                    sig = _VULN_SIGNATURES.get(cat)
+                    if sig:
+                        seen_categories.add(cat)
+                        lang_name = f_lang if sig["language"] in ("Any", "Unknown") else sig["language"]
+                        dropped.append({
+                            "category": cat,
+                            "severity": sig["severity"],
+                            "cve_cwe": sig["cve_cwe"],
+                            "title": sig["title"],
+                            "language": lang_name,
+                            "file_path": f_path,
+                            "remediation": sig["remediation"],
+                        })
+
+    # 2. Fallback check for flat/headerless diff blocks
     removed_map = _guard_categories_map(blocks["removed_blocks"])
     added_map = _guard_categories_map(blocks["added_blocks"])
-
-    # Identify every category whose guard was dropped without replacement
-    dropped: list = []
     for category, guards in removed_map.items():
         if guards and not _has_replacement_guard(category, added_map):
-            sig = _VULN_SIGNATURES.get(category)
-            if sig:
-                dropped.append({
-                    "category": category,
-                    "severity": sig["severity"],
-                    "cve_cwe": sig["cve_cwe"],
-                    "title": sig["title"],
-                    "language": sig["language"],
-                    "remediation": sig["remediation"],
-                })
+            if category not in seen_categories:
+                sig = _VULN_SIGNATURES.get(category)
+                if sig:
+                    seen_categories.add(category)
+                    lang_name = detect_language(file_path) if sig["language"] in ("Any", "Unknown") else sig["language"]
+                    dropped.append({
+                        "category": category,
+                        "severity": sig["severity"],
+                        "cve_cwe": sig["cve_cwe"],
+                        "title": sig["title"],
+                        "language": lang_name,
+                        "file_path": file_path,
+                        "remediation": sig["remediation"],
+                    })
 
     if not dropped:
         return {
@@ -339,6 +396,7 @@ def analyze_diff(
     dropped.sort(key=lambda d: _SEVERITY_ORDER.get(d["severity"], 99))
     primary = dropped[0]
     all_categories_str = ", ".join(d["category"] for d in dropped)
+    target_file = primary.get("file_path", file_path)
 
     risk_score = random.randint(_RISK_SCORE_MIN, _RISK_SCORE_MAX)
     finding_id = f"DS-{uuid.uuid4().hex[:8].upper()}"
@@ -348,7 +406,7 @@ def analyze_diff(
         "title": primary["title"],
         "repository": repository,
         "description": (
-            f"A {primary['severity']}-severity guard regression was detected in {file_path}. "
+            f"A {primary['severity']}-severity guard regression was detected in {target_file}. "
             f"Language: {primary['language']}. "
             f"Dropped protection for: {all_categories_str}. "
             f"Reference: {primary['cve_cwe']}. "
@@ -357,6 +415,7 @@ def analyze_diff(
         "severity": primary["severity"],
         "cve_cwe": primary["cve_cwe"],
         "language": primary["language"],
+        "file_path": target_file,
         "dropped_categories": [d["category"] for d in dropped],
     }
 
@@ -366,7 +425,7 @@ def analyze_diff(
         "risk_score": risk_score,
         "hold_hours": _HOLD_HOURS,
         "explanation": (
-            f"Security guard regression detected. "
+            f"Security guard regression detected in {target_file}. "
             f"Dropped protections: {all_categories_str}. "
             f"Primary: {primary['cve_cwe']} ({primary['severity']}) — {primary['language']}."
         ),

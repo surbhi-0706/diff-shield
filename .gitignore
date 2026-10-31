@@ -48,6 +48,10 @@ __pycache__/
 # Local backend database
 /diff_shield.db
 /diff_shield.db-*
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
 
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/

@@ -1,4 +1,4 @@
-﻿"""
+"""
 main.py - DiffShield FastAPI application.
 
 Endpoints:
@@ -15,6 +15,7 @@ from pathlib import Path
 # Ensure sibling modules are importable when uvicorn is launched from any CWD
 sys.path.insert(0, str(Path(__file__).parent))
 
+import re
 import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -91,12 +92,26 @@ async def analyze_pr(request: AnalyzePRRequest):
     Returns a verdict, risk score, quarantine status, and structured finding.
     """
     raw_diff: str = ""
+    repository = request.repository or "unknown/repo"
+    pr_number = request.pr_number or 0
 
     # 1. Fetch diff from GitHub if a URL was provided
     if request.pr_url:
-        diff_url = request.pr_url.rstrip("/") + ".diff"
+        match = re.search(r"github\.com/([^/]+)/([^/]+)/pull/(\d+)", request.pr_url)
+        if match:
+            owner, repo, pr_num_str = match.groups()
+            pr_number = int(pr_num_str)
+            repository = f"{owner}/{repo}"
+            diff_url = f"https://github.com/{owner}/{repo}/pull/{pr_number}.diff"
+        else:
+            diff_url = request.pr_url.split("?")[0].split("#")[0].rstrip("/") + ".diff"
+
         try:
-            async with httpx.AsyncClient(follow_redirects=True, timeout=20) as client:
+            headers = {
+                "User-Agent": "DiffShield-AppSec/1.0",
+                "Accept": "text/plain",
+            }
+            async with httpx.AsyncClient(follow_redirects=True, timeout=20, headers=headers) as client:
                 response = await client.get(diff_url)
                 response.raise_for_status()
                 raw_diff = response.text
@@ -121,8 +136,6 @@ async def analyze_pr(request: AnalyzePRRequest):
             detail="Provide either 'pr_url' or 'diff_text'.",
         )
 
-    repository = request.repository or "unknown/repo"
-    pr_number = request.pr_number or 0
     file_path = request.file_path or "unknown"
     clean_code = request.clean_code or ""
 
