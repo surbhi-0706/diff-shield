@@ -151,3 +151,18 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# Python virtual environments
+.venv/
+**/.venv/
+
+# Local databases and SQLite runtime files
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Python runtime cache
+__pycache__/
+*.py[cod]

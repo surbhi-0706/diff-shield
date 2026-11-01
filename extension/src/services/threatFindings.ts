@@ -1,9 +1,16 @@
+
 export interface ThreatFinding {
   id: string;
   title: string;
   repository: string;
   description: string;
   detectedAt: string;
+  prUrl?: string;
+  severity?: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+  riskScore?: number;
+  status?: string;
+  reviewDeadline?: string;
+  filePath?: string;
 }
 
 interface ChromeExtensionApi {
@@ -13,7 +20,7 @@ interface ChromeExtensionApi {
   storage?: {
     local: {
       get(
-        key: string,
+        keys: string | string[],
         callback: (items: Record<string, unknown>) => void,
       ): void;
       remove(key: string, callback: () => void): void;
@@ -36,82 +43,131 @@ interface ChromeExtensionApi {
 }
 
 const extensionApi = (
-  globalThis as typeof globalThis & { chrome?: ChromeExtensionApi }
+  globalThis as typeof globalThis & {
+    chrome?: ChromeExtensionApi;
+  }
 ).chrome;
 
-export function isThreatFinding(value: unknown): value is ThreatFinding {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
 
-  const finding = value as Record<string, unknown>;
+export function isThreatFinding(
+  value: unknown,
+): value is ThreatFinding {
+  if (!isRecord(value)) return false;
 
   return (
-    typeof finding.id === "string" &&
-    typeof finding.title === "string" &&
-    typeof finding.repository === "string" &&
-    typeof finding.description === "string" &&
-    typeof finding.detectedAt === "string"
+    typeof value.id === "string" &&
+    typeof value.title === "string" &&
+    typeof value.repository === "string" &&
+    typeof value.description === "string" &&
+    typeof value.detectedAt === "string"
   );
+}
+
+function readFinding(value: unknown): ThreatFinding | null {
+  if (!isThreatFinding(value)) return null;
+
+  return {
+    id: value.id,
+    title: value.title,
+    repository: value.repository,
+    description: value.description,
+    detectedAt: value.detectedAt,
+    ...(typeof value.prUrl === "string"
+      ? { prUrl: value.prUrl }
+      : {}),
+    ...(typeof value.severity === "string"
+      ? {
+          severity: value.severity as ThreatFinding["severity"],
+        }
+      : {}),
+    ...(typeof value.riskScore === "number"
+      ? { riskScore: value.riskScore }
+      : {}),
+    ...(typeof value.status === "string"
+      ? { status: value.status }
+      : {}),
+    ...(typeof value.reviewDeadline === "string"
+      ? { reviewDeadline: value.reviewDeadline }
+      : {}),
+    ...(typeof value.filePath === "string"
+      ? { filePath: value.filePath }
+      : {}),
+  };
 }
 
 export function subscribeToLatestThreat(
   onFinding: (finding: ThreatFinding | null) => void,
 ): () => void {
   const storage = extensionApi?.storage;
+
   if (!storage) {
+    console.warn(
+      "[DiffShield] Chrome storage is unavailable. Open the installed extension.",
+    );
+    onFinding(null);
     return () => {};
   }
 
+  let disposed = false;
   let storageChanged = false;
+
   const listener = (
     changes: Record<string, { newValue?: unknown }>,
     areaName: string,
   ) => {
-    if (areaName !== "local" || !Object.hasOwn(changes, "latestThreat")) {
+    if (
+      areaName !== "local" ||
+      !Object.hasOwn(changes, "latestThreat")
+    ) {
       return;
     }
 
     storageChanged = true;
-    const value = changes.latestThreat.newValue;
-    onFinding(isThreatFinding(value) ? value : null);
+
+    if (!disposed) {
+      onFinding(readFinding(changes.latestThreat.newValue));
+    }
   };
 
   storage.onChanged.addListener(listener);
+
   storage.local.get("latestThreat", (items) => {
+    if (disposed) return;
+
     const error = extensionApi?.runtime?.lastError;
+
     if (error) {
       console.error(
-        "Could not load the latest security finding:",
+        "[DiffShield] Could not load the latest finding:",
         error.message,
       );
       return;
     }
 
     if (!storageChanged) {
-      const value = items.latestThreat;
-      onFinding(isThreatFinding(value) ? value : null);
+      onFinding(readFinding(items.latestThreat));
     }
   });
 
-  return () => storage.onChanged.removeListener(listener);
+  return () => {
+    disposed = true;
+    storage.onChanged.removeListener(listener);
+  };
 }
 
+/**
+ * Security findings must not be dismissed by deleting their
+ * persistent storage record.
+ *
+ * Resolution must happen through an authorized backend review.
+ */
 export function dismissLatestThreat(): boolean {
-  const storage = extensionApi?.storage;
-  if (!storage) {
-    return false;
-  }
+  console.warn(
+    "[DiffShield] Security findings cannot be dismissed locally. Resolve them through an authorized review.",
+  );
 
-  storage.local.remove("latestThreat", () => {
-    const error = extensionApi?.runtime?.lastError;
-    if (error) {
-      console.error(
-        "Could not dismiss the security finding:",
-        error.message,
-      );
-    }
-  });
-
-  return true;
+  return false;
 }
